@@ -39,6 +39,14 @@ $GAME_STATE
 
 $HISTORY_BLOCK
 
+DIALOGUE VARIETY (CRITICAL):
+- NEVER repeat the same phrase twice across cycles. Check the RECENT HISTORY and use COMPLETELY different words.
+- BANNED phrases (already overused): "iterate", "compound our advantages", "pivotal moment", "delete the player", "skill issue", "parallelize", "incredible", "approach vectors", "going in no backup needed". Use NEW phrasings every time.
+- Reference SPECIFIC game events: who just died, who's closest, what the player is doing, the terrain, time of day, hunger levels.
+- Keep dialogue SHORT — 1 sentence max per character. Punchy, not wordy.
+- Make Dario's insults SPECIFIC to what Sam just said or did, not generic "your plan sucks."
+- Elon should reference actual game state (his health, distance, etc.), not just bravado.
+
 Respond in EXACTLY this format, no deviations:
 
 [DIALOGUE]

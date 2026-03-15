@@ -51,6 +51,10 @@ async function main() {
     console.log('[Orchestrator] Applying glow effect to all hunters...');
     await gameState.applyGlowToHunters();
 
+    // Fix #2: Arm hunters with weapons so they don't fight bare-handed
+    console.log('[Orchestrator] Arming hunters...');
+    await armHunters(gameState);
+
     // Main orchestration loop
     let cycleCount = 0;
     while (true) {
@@ -75,6 +79,9 @@ async function main() {
             const pos = await gameState.getPlayerPositionViaRcon(gameState.playerName);
             if (pos) gameState.playerPosition = pos;
         }
+
+        // Fix #3: Keep hunters fed and healthy
+        await gameState.healAndFeedHunters();
 
         // Update in-game HUD (bossbar timer + scoreboard)
         await gameState.updateHud();
@@ -162,7 +169,6 @@ async function runCycle(gameState) {
 function sendDirectives(gameState, directives) {
     const playerName = gameState.playerName;
     for (const [agentName, directive] of Object.entries(directives)) {
-        // Find this hunter's distance to the player
         const state = gameState.agentStates[agentName];
         let dist = Infinity;
         if (state?.gameplay?.position && gameState.playerPosition) {
@@ -171,26 +177,42 @@ function sendDirectives(gameState, directives) {
             dist = Math.sqrt((pos.x - pp.x) ** 2 + (pos.z - pp.z) ** 2);
         }
 
-        // Always chase or attack — maximum aggression
+        // Fix #4: If bot is Idle and far from player, force a stop first to unstick
+        const action = state?.action?.current || '';
+        if (action === 'Idle' && dist > 10 && playerName) {
+            gameState.sendDirective(agentName, '!stop');
+        }
+
         let command;
-        if (playerName && dist < 16) {
-            // Within striking range — attack relentlessly
+        if (playerName && dist < 24) {
+            // Fix #5: Wider attack range so bots don't stop short
             command = `!attackPlayer("${playerName}")`;
         } else if (playerName) {
-            // Far away — sprint to the player, get close
             command = `!goToPlayer("${playerName}", 2)`;
         } else if (gameState.playerPosition) {
-            // No player name but have coords — rush to last known position
             const pp = gameState.playerPosition;
             command = `!goToCoordinates(${pp.x}, ${pp.y}, ${pp.z}, 2)`;
         } else {
-            // No info — search aggressively
-            command = `!newAction("Sprint in a random direction searching for the player. Look around constantly. Attack any player on sight.")`;
+            command = `!searchForEntity("player", 512)`;
         }
 
         console.log(`[Orchestrator] -> ${agentName}: ${command} (dist=${Math.round(dist)})`);
         gameState.sendDirective(agentName, command);
     }
+}
+
+/**
+ * Fix #2: Give all hunters a weapon at hunt start via RCON.
+ * Gives each bot an iron sword so they don't fight bare-handed.
+ */
+async function armHunters(gameState) {
+    const cmds = [];
+    for (const name of gameState.getAgentNames()) {
+        cmds.push(`give ${name} iron_sword 1`);
+        cmds.push(`give ${name} shield 1`);
+    }
+    await gameState.rconBatch(cmds);
+    console.log('[Orchestrator] Armed all hunters with iron sword + shield');
 }
 
 async function waitForAgents(gameState, timeoutMs = 120000) {

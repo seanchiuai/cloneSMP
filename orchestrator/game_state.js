@@ -412,6 +412,28 @@ export class GameStateManager {
         ]);
     }
 
+    /**
+     * Keep hunters fed and healthy via RCON. Apply saturation to any hunter
+     * with low hunger, and regeneration to any with low health.
+     */
+    async healAndFeedHunters() {
+        const cmds = [];
+        for (const [name, state] of Object.entries(this.agentStates)) {
+            if (!state?.gameplay) continue;
+            const hunger = state.gameplay.hunger ?? 20;
+            const health = state.gameplay.health ?? 20;
+            if (hunger < 15) {
+                cmds.push(`effect give ${name} minecraft:saturation 5 1 true`);
+            }
+            if (health < 15) {
+                cmds.push(`effect give ${name} minecraft:regeneration 5 1 true`);
+            }
+        }
+        if (cmds.length > 0) {
+            await this.rconBatch(cmds);
+        }
+    }
+
     getAgentNames() {
         return Object.keys(this.agentStates);
     }
