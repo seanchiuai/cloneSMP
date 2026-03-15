@@ -15,7 +15,7 @@ const client = new OpenAI({
 const MODEL = process.env.ORCHESTRATOR_MODEL || 'meta-llama/Llama-3.3-70B-Instruct-fast';
 
 /**
- * Call the Groq LLM with the current game state.
+ * Call the Nebius LLM with the current game state.
  * Returns the raw response text.
  */
 export async function callOrchestrator(gameStateString) {
