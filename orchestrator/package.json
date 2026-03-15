@@ -1,0 +1,16 @@
+{
+  "name": "clonessmp-orchestrator",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Orchestrator for ClonesSMP manhunt — drives 4 AI celebrity hunters",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.3.1",
+    "mineflayer": "^4.23.0",
+    "openai": "^4.67.0",
+    "socket.io-client": "^4.7.5"
+  }
+}

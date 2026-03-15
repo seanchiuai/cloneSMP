@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { GameStateManager } from './game_state.js';
 import { callOrchestrator } from './llm.js';
 import { parseOrchestratorResponse, getFallbackDirectives } from './parser.js';
@@ -10,8 +11,8 @@ async function main() {
     console.log(`[Orchestrator] Cycle interval: ${ORCHESTRATOR_INTERVAL_MS}ms`);
     console.log(`[Orchestrator] MindServer port: ${MINDSERVER_PORT}`);
 
-    if (!process.env.GROQCLOUD_API_KEY) {
-        console.error('[Orchestrator] ERROR: GROQCLOUD_API_KEY environment variable is not set!');
+    if (!process.env.NEBIUS_API_KEY) {
+        console.error('[Orchestrator] ERROR: NEBIUS_API_KEY environment variable is not set!');
         process.exit(1);
     }
 

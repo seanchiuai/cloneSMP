@@ -1,0 +1,21 @@
+# API keys / secrets
+.env
+.env.local
+mindcraft/keys.json
+
+# Dependencies
+node_modules/
+orchestrator/node_modules/
+mindcraft/node_modules/
+
+# Minecraft server runtime
+server/logs/
+server/world/
+server/cache/
+server/libraries/
+server/versions/
+server/plugins/SkinsRestorer/
+server/.console_history
+
+# macOS
+.DS_Store
