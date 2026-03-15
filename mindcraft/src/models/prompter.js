@@ -57,6 +57,15 @@ export class Prompter {
 
         let chat_model_profile = selectAPI(this.profile.model);
         this.chat_model = createModel(chat_model_profile);
+        this.backup_chat_model = null;
+        if (this.profile.backup_model) {
+            try {
+                const backup_model_profile = selectAPI(this.profile.backup_model);
+                this.backup_chat_model = createModel(backup_model_profile);
+            } catch (e) {
+                console.warn('Failed to initialize backup model:', e?.message || e);
+            }
+        }
 
         if (this.profile.code_model) {
             let code_model_profile = selectAPI(this.profile.code_model);
@@ -225,7 +234,12 @@ export class Prompter {
             let generation;
 
             try {
-                generation = await this.chat_model.sendRequest(messages, prompt);
+                generation = await this._sendRequestWithFallback(
+                    this.chat_model,
+                    'sendRequest',
+                    [messages, prompt],
+                    'conversation'
+                );
                 if (typeof generation !== 'string') {
                     console.error('Error: Generated response is not a string', generation);
                     throw new Error('Generated response is not a string');
@@ -270,7 +284,12 @@ export class Prompter {
         let prompt = this.profile.coding;
         prompt = await this.replaceStrings(prompt, messages, this.coding_examples);
 
-        let resp = await this.code_model.sendRequest(messages, prompt);
+        let resp = await this._sendRequestWithFallback(
+            this.code_model,
+            'sendRequest',
+            [messages, prompt],
+            'coding'
+        );
         this.awaiting_coding = false;
         await this._saveLog(prompt, messages, resp, 'coding');
         return resp;
@@ -280,7 +299,12 @@ export class Prompter {
         await this.checkCooldown();
         let prompt = this.profile.saving_memory;
         prompt = await this.replaceStrings(prompt, null, null, to_summarize);
-        let resp = await this.chat_model.sendRequest([], prompt);
+        let resp = await this._sendRequestWithFallback(
+            this.chat_model,
+            'sendRequest',
+            [[], prompt],
+            'memory'
+        );
         await this._saveLog(prompt, to_summarize, resp, 'memSaving');
         if (resp?.includes('</think>')) {
             const [_, afterThink] = resp.split('</think>')
@@ -295,7 +319,12 @@ export class Prompter {
         let messages = this.agent.history.getHistory();
         messages.push({role: 'user', content: new_message});
         prompt = await this.replaceStrings(prompt, null, null, messages);
-        let res = await this.chat_model.sendRequest([], prompt);
+        let res = await this._sendRequestWithFallback(
+            this.chat_model,
+            'sendRequest',
+            [[], prompt],
+            'bot-responder'
+        );
         return res.trim().toLowerCase() === 'respond';
     }
 
@@ -303,7 +332,12 @@ export class Prompter {
         await this.checkCooldown();
         let prompt = this.profile.image_analysis;
         prompt = await this.replaceStrings(prompt, messages, null, null, null);
-        return await this.vision_model.sendVisionRequest(messages, prompt, imageBuffer);
+        return await this._sendRequestWithFallback(
+            this.vision_model,
+            'sendVisionRequest',
+            [messages, prompt, imageBuffer],
+            'vision'
+        );
     }
 
     async promptGoalSetting(messages, last_goals) {
@@ -316,7 +350,12 @@ export class Prompter {
         user_message = await this.replaceStrings(user_message, messages, null, null, last_goals);
         let user_messages = [{role: 'user', content: user_message}];
 
-        let res = await this.chat_model.sendRequest(user_messages, system_message);
+        let res = await this._sendRequestWithFallback(
+            this.chat_model,
+            'sendRequest',
+            [user_messages, system_message],
+            'goal-setting'
+        );
 
         let goal = null;
         try {
@@ -331,6 +370,53 @@ export class Prompter {
         }
         goal.quantity = parseInt(goal.quantity);
         return goal;
+    }
+
+    _isDisconnectedResponse(response) {
+        if (typeof response !== 'string') {
+            return false;
+        }
+        const lowered = response.toLowerCase();
+        return lowered.includes('my brain disconnected');
+    }
+
+    async _sendRequestWithFallback(primaryModel, methodName, args, label) {
+        let primaryResponse = null;
+        let primaryError = null;
+
+        try {
+            primaryResponse = await primaryModel[methodName](...args);
+            if (!this._isDisconnectedResponse(primaryResponse)) {
+                return primaryResponse;
+            }
+            console.warn(`Primary model returned disconnected response during ${label}.`);
+        } catch (err) {
+            primaryError = err;
+            console.warn(`Primary model request failed during ${label}:`, err?.message || err);
+        }
+
+        if (!this.backup_chat_model || typeof this.backup_chat_model[methodName] !== 'function') {
+            if (primaryError) {
+                throw primaryError;
+            }
+            return primaryResponse;
+        }
+
+        try {
+            console.warn(`Falling back to backup model during ${label}.`);
+            const backupResponse = await this.backup_chat_model[methodName](...args);
+            if (!this._isDisconnectedResponse(backupResponse)) {
+                return backupResponse;
+            }
+            console.warn(`Backup model also returned disconnected response during ${label}.`);
+            return backupResponse;
+        } catch (backupErr) {
+            console.error(`Backup model request failed during ${label}:`, backupErr?.message || backupErr);
+            if (primaryError) {
+                throw primaryError;
+            }
+            throw backupErr;
+        }
     }
 
     async _saveLog(prompt, messages, generation, tag) {

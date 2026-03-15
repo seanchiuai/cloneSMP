@@ -1,7 +1,7 @@
 const settings = {
     "minecraft_version": "1.21.1",
     "host": "127.0.0.1", // or "localhost", "your.ip.address.here"
-    "port": 55916, // set to -1 to automatically scan for open ports
+    "port": 55916, // must match server/server.properties -> server-port
     "auth": "offline", // or "microsoft"
 
     // the mindserver manages all agents and hosts the UI
@@ -19,8 +19,8 @@ const settings = {
         // individual profiles override values from the base profile
     ],
 
-    "load_memory": true, // load memory from previous session
-    "init_message": "You just spawned in Minecraft. Introduce yourself briefly in character and start figuring out what to do.", // sends to all on spawn
+    "load_memory": false, // start fresh each hunter-mode session
+    "init_message": "Hunter mode active. A human Runner is trying to beat Minecraft. Coordinate with the other bots, locate the Runner, and continuously disrupt progression.", // sends to all on spawn
     "only_chat_with": [], // users that the bots listen to and send general messages to. if empty it will chat publicly
 
     "speak": false,

@@ -1,3 +1,275 @@
+# ClonesSMP - Hunter Mode Architecture
+
+## Overview
+
+ClonesSMP now runs in **Hunter Mode**:
+
+- **1 human player (Runner)** attempts to beat Minecraft (kill the Ender Dragon).
+- **4 AI bots (Hunters)** coordinate to track, pressure, and eliminate the Runner.
+- Hunters are powered by Mindcraft (Mineflayer + LLM command loop) and share a common strategic objective:
+  - deny progression,
+  - control key resources/locations,
+  - repeatedly disrupt or kill the Runner.
+
+The game loop is asymmetric: the Runner optimizes for progression speed, while Hunters optimize for interception and denial.
+
+---
+
+## 1. System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        HOST MACHINE                                 │
+│                                                                     │
+│  ┌──────────────────────┐       ┌─────────────────────────────────┐ │
+│  │   Minecraft Server   │       │       Mindcraft (Node.js)       │ │
+│  │   (Paper 1.21.x)     │       │                                 │ │
+│  │                      │◄─────►│  ┌───────────┐ ┌───────────┐   │ │
+│  │   Port: 25565        │  MC   │  │ Hunter 1  │ │ Hunter 2  │   │ │
+│  │                      │ Proto │  └─────┬─────┘ └─────┬─────┘   │ │
+│  │  ┌────────────────┐  │       │  ┌─────┴─────┐ ┌─────┴─────┐   │ │
+│  │  │ Runner (Human) │  │       │  │ Hunter 3  │ │ Hunter 4  │   │ │
+│  │  └────────────────┘  │       │  └─────┬─────┘ └─────┬─────┘   │ │
+│  └──────────────────────┘       │        │             │         │ │
+│                                 │  ┌─────┴─────────────┴─────┐   │ │
+│  ┌──────────────────────┐       │  │ MindServer (UI + WS)     │   │ │
+│  │ Browser UI           │◄─────►│  │ Port: 8080               │   │ │
+│  │ localhost:8080       │  WS   │  └─────────────────────────┘   │ │
+│  └──────────────────────┘       └──────────┬──────────────────────┘ │
+└─────────────────────────────────────────────┼─────────────────────────┘
+                                              │ HTTPS
+                                              ▼
+                                ┌────────────────────────┐
+                                │   LLM Provider         │
+                                │ (Nebius/OpenAI/etc.)   │
+                                └────────────────────────┘
+```
+
+### Component Roles
+
+| Component | Role |
+|-----------|------|
+| **Paper Server** | Simulates the world and player interactions. Runner and Hunters coexist in one world. |
+| **Mindcraft** | Hosts all 4 Hunters in one Node.js runtime; each hunter has independent state and behavior loop. |
+| **MindServer UI** | Live observability for bot output, status, and action traces. |
+| **LLM Provider** | Generates per-hunter decisions and command sequences from prompt context. |
+| **Runner** | Human objective actor: attempts standard progression to End and dragon kill. |
+
+---
+
+## 2. Hunter Mode Objectives
+
+## 2.1 Primary Objective (Hunters)
+
+Prevent the Runner from completing the game by:
+
+1. Locating and tracking the Runner.
+2. Interrupting milestone progress (iron/diamond/nether/stronghold/end).
+3. Forcing deaths and resource loss.
+4. Controlling choke points (portals, beds, villages, blaze farming routes, stronghold access).
+
+## 2.2 Runner Objective
+
+Progress through normal Minecraft victory path:
+
+`Overworld progression -> Nether progression -> Stronghold -> End -> Dragon kill`
+
+## 2.3 Victory Conditions
+
+| Side | Win Condition |
+|------|----------------|
+| **Runner** | Kills Ender Dragon. |
+| **Hunters** | Hard stop (time-based), repeated kill pressure, and denial such that Runner cannot complete objective in configured window. |
+
+---
+
+## 3. Bot Process Architecture
+
+Each Hunter process follows the same internal structure:
+
+1. **Perception Layer**  
+   Reads world/player/entity state from Mineflayer and mode signals.
+
+2. **Context Builder (Prompter)**  
+   Builds system prompt with live placeholders:
+   - `$STATS`
+   - `$INVENTORY`
+   - `$MEMORY`
+   - `$COMMAND_DOCS`
+   - `$SELF_PROMPT`
+
+3. **Reasoning Layer (LLM Call)**  
+   Sends context + history to model provider and receives command-bearing response.
+
+4. **Execution Layer**  
+   Parses command (`!attackPlayer`, `!followPlayer`, `!collectBlocks`, `!newAction`, etc.) and executes through ActionManager.
+
+5. **Memory Layer**  
+   Summarizes old turns into compressed strategic memory for future decisions.
+
+6. **Autonomy Loop (Self Prompter)**  
+   Re-prompts continuously toward hunter objective when idle.
+
+---
+
+## 4. Data Flow: Hunter Reaction Trace
+
+Example: Runner is spotted entering a cave with iron gear.
+
+1. **Perception**  
+   Hunter sees Runner nearby and mode checks detect a high-value target opportunity.
+
+2. **Prompt Assembly**  
+   Prompt includes:
+   - current stats/inventory,
+   - remembered Runner location + last observed equipment,
+   - active hunter objective.
+
+3. **LLM Decision**  
+   Model returns tactical response, e.g.:
+   - call reinforcements via bot conversation,
+   - chase and pressure,
+   - force terrain disadvantage.
+
+4. **Command Execution**  
+   Hunter executes action command chain (`!followPlayer`, `!attackPlayer`, `!newAction(...)`, etc.).
+
+5. **Coordination**  
+   Messages to other Hunters update pursuit assignments (cutoff, rear pressure, resource denial).
+
+6. **State Update**  
+   Conversation and outcomes are stored in history and memory summary for subsequent cycles.
+
+---
+
+## 5. Multi-Hunter Coordination Model
+
+Hunters coordinate through Mindcraft bot-to-bot conversation:
+
+- `!startConversation("HunterX", "...")` opens private tactical channel.
+- Self-prompting pauses during active conversation and resumes afterward.
+- A hunter can be in only one active conversation at a time.
+- Busy suppression and timeout logic reduce deadlock/looping.
+
+### Recommended Role Split
+
+| Hunter Role | Focus |
+|-------------|-------|
+| **Tracker** | Maintain nearest contact and ping Runner location updates. |
+| **Interceptor** | Move ahead to probable pathing routes/choke points. |
+| **Disruptor** | Break infrastructure, loot pressure, deny utility/resources. |
+| **Finisher** | Commit to direct combat and kill conversion. |
+
+Roles are soft and can be reassigned by prompts at runtime.
+
+---
+
+## 6. Tactical Progression Map
+
+Hunters adapt pressure by Runner stage:
+
+| Runner Stage | Hunter Priority |
+|--------------|-----------------|
+| Early game | Deny food/tools, force respawns, prevent stable base setup. |
+| Iron/diamond phase | Contest caves and villages, punish mining trips. |
+| Nether entry | Camp likely portal routes and portal exits. |
+| Blaze/pearls | Prevent sustained farm loops, collapse safety windows. |
+| Stronghold phase | Shadow movement, deny uninterrupted eye throws and setup time. |
+| End phase | Disrupt final prep and entry timing before dragon fight completes. |
+
+---
+
+## 7. Prompting Strategy for Hunter Behavior
+
+Hunter profiles should encode:
+
+1. **Mission framing**  
+   "Stop the Runner from beating the game."
+
+2. **Tactical directives**  
+   - prioritize proximity + pressure over passive gathering,
+   - call teammates when target is located,
+   - short, command-first outputs.
+
+3. **Coordination heuristics**  
+   - one bot tracks, one intercepts, one denies resources, one contests combat,
+   - end conversations quickly once assignments are clear.
+
+4. **Safety/loop controls**  
+   preserve command validity and avoid chat-only drift.
+
+---
+
+## 8. Runtime Configuration
+
+### Core Runtime
+
+- 4 profiles in `settings.profiles`.
+- `base_profile: "survival"` for default survival mechanics.
+- `chat_bot_messages: true` to maintain team visibility.
+- `max_messages`, `num_examples`, and cooldowns tuned for responsive tactical loops.
+
+### Provider Independence
+
+LLM backend is swappable per profile:
+
+- Nebius-compatible endpoint,
+- OpenAI,
+- OpenRouter,
+- Groq,
+- local Ollama,
+- or other supported adapters.
+
+The hunter architecture remains the same regardless of provider.
+
+---
+
+## 9. Reliability and Risk Controls
+
+| Risk | Mitigation |
+|------|------------|
+| Infinite bot chat loops | Conversation end command + timeout + self-prompt resume behavior. |
+| Action stalls | ActionManager interruption/timeout handling and idle recovery. |
+| Prompt drift from objective | Explicit hunter self-goal + memory summaries + command-first instructions. |
+| Cost spikes | Message window limits, example limits, provider/model swaps. |
+| Multi-bot chaos contention | Role heuristics and short tactical conversations. |
+
+---
+
+## 10. Observability
+
+Use MindServer UI to monitor:
+
+- per-hunter chat and command outputs,
+- action transitions and interrupt patterns,
+- conversation handoffs,
+- stuck/idle behaviors,
+- progression pressure effectiveness over time.
+
+Key KPI for Hunter Mode: **Runner progression delay and disruption consistency**, not just kill count.
+
+---
+
+## 11. Startup Sequence
+
+1. Start Paper server.
+2. Start Mindcraft (`node main.js`).
+3. Load 4 hunter profiles.
+4. Hunters spawn and receive initial hunter objective.
+5. Self-prompt loops activate.
+6. Runner joins and attempts progression.
+7. Hunters enter locate-track-intercept-disrupt loop.
+
+---
+
+## 12. Summary
+
+ClonesSMP Hunter Mode is an asymmetric PvE/PvP orchestration system:
+
+- the human optimizes for game completion,
+- four autonomous LLM-driven agents optimize for coordinated denial.
+
+Mindcraft provides the control loop (prompting, command execution, memory, coordination), while Minecraft provides the adversarial environment and objective constraints.
 # ClonesSMP — Architecture Document
 
 ## Overview

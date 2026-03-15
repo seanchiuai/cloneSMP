@@ -10,6 +10,72 @@ async function say(agent, message) {
     agent.openChat(message);
 }
 
+function _isHumanPlayerEntity(entity) {
+    return entity && entity.type === 'player' && entity.username;
+}
+
+function _materialTier(name = '') {
+    if (name.includes('netherite')) return 5;
+    if (name.includes('diamond')) return 4;
+    if (name.includes('iron')) return 3;
+    if (name.includes('chainmail') || name.includes('golden')) return 2;
+    if (name.includes('leather')) return 1;
+    return 0;
+}
+
+function _weaponTier(name = '') {
+    if (name.includes('netherite_sword') || name.includes('netherite_axe')) return 5;
+    if (name.includes('diamond_sword') || name.includes('diamond_axe')) return 4;
+    if (name.includes('iron_sword') || name.includes('iron_axe')) return 3;
+    if (name.includes('stone_sword') || name.includes('stone_axe')) return 2;
+    if (name.includes('wooden_sword') || name.includes('wooden_axe')) return 1;
+    return 0;
+}
+
+function _scoreLoadout(itemNames = []) {
+    let armor = 0;
+    let weapon = 0;
+    for (const raw of itemNames) {
+        const name = (raw || '').toLowerCase();
+        if (!name) continue;
+        if (name.includes('helmet') || name.includes('chestplate') || name.includes('leggings') || name.includes('boots')) {
+            armor += _materialTier(name);
+            continue;
+        }
+        weapon = Math.max(weapon, _weaponTier(name));
+    }
+    return armor + weapon * 2;
+}
+
+function _entityGearScore(entity) {
+    const equipped = (entity?.equipment || []).map(item => item?.name || '');
+    return _scoreLoadout(equipped);
+}
+
+function _botGearScore(bot) {
+    const armorSlots = [5, 6, 7, 8].map(i => bot.inventory?.slots?.[i]?.name || '');
+    const held = [bot.heldItem?.name || ''];
+    return _scoreLoadout([...armorSlots, ...held]);
+}
+
+async function _craftCombatUpgrades(bot) {
+    // Craft strongest practical upgrades first; failures are safe no-ops.
+    const craftOrder = ['iron_sword', 'shield', 'stone_sword', 'wooden_sword'];
+    for (const recipe of craftOrder) {
+        try {
+            await skills.craftRecipe(bot, recipe, 1);
+        } catch (err) {
+            // ignore and continue to next recipe attempt
+        }
+    }
+    // Equip whatever can be worn after crafting attempts.
+    try {
+        bot.armorManager.equipAll();
+    } catch (err) {
+        // best-effort only
+    }
+}
+
 // a mode is a function that is called every tick to respond immediately to the world
 // it has the following fields:
 // on: whether 'update' is called every tick
@@ -183,6 +249,87 @@ const modes_list = [
                     await skills.attackEntity(agent.bot, huntable);
                 });
             }
+        }
+    },
+    {
+        name: 'player_hunting',
+        description: 'Hunt nearby human players when visible. Interrupts all actions.',
+        interrupts: ['all'],
+        on: false,
+        active: false,
+        range: 24,
+        update: async function (agent) {
+            const botNames = new Set(convoManager.getInGameAgents());
+            const targetPlayer = world.getNearestEntityWhere(
+                agent.bot,
+                entity => {
+                    if (entity.type !== 'player') return false;
+                    const username = entity.username;
+                    if (!username || username === agent.name) return false;
+                    return !botNames.has(username);
+                },
+                this.range
+            );
+            if (targetPlayer && await world.isClearPath(agent.bot, targetPlayer)) {
+                execute(this, agent, async () => {
+                    const name = targetPlayer.username || 'unknown';
+                    say(agent, `Hunting player ${name}!`);
+                    await skills.attackEntity(agent.bot, targetPlayer, true);
+                });
+            }
+        }
+    },
+    {
+        name: 'runner_gear_response',
+        description: 'React when nearby human player appears better geared.',
+        interrupts: ['all'],
+        on: false,
+        active: false,
+        range: 24,
+        min_score_delta: 4,
+        cooldown_ms: 12000,
+        last_reaction_at: 0,
+        update: async function (agent) {
+            if (Date.now() - this.last_reaction_at < this.cooldown_ms) return;
+
+            const botNames = new Set(convoManager.getInGameAgents());
+            const targetPlayer = world.getNearestEntityWhere(
+                agent.bot,
+                entity => _isHumanPlayerEntity(entity) && entity.username !== agent.name && !botNames.has(entity.username),
+                this.range
+            );
+            if (!targetPlayer) return;
+
+            const playerScore = _entityGearScore(targetPlayer);
+            const botScore = _botGearScore(agent.bot);
+            const delta = playerScore - botScore;
+            if (delta < this.min_score_delta) return;
+
+            const personality = (agent.prompter.profile.hunter_personality || '').toLowerCase();
+            execute(this, agent, async () => {
+                const targetName = targetPlayer.username;
+                if (personality === 'dario') {
+                    say(agent, `${targetName} is out-gearing me. Repositioning and upgrading first.`);
+                    await _craftCombatUpgrades(agent.bot);
+                    await skills.moveAwayFromEntity(agent.bot, targetPlayer, 16);
+                    await skills.goToPlayer(agent.bot, targetName, 8);
+                } else if (personality === 'sam') {
+                    say(agent, `${targetName} has better gear. Upgrading and re-engaging with coordination.`);
+                    await _craftCombatUpgrades(agent.bot);
+                    await skills.goToPlayer(agent.bot, targetName, 5);
+                } else if (personality === 'jensen') {
+                    say(agent, `${targetName} is gear-advantaged. Optimizing loadout and collapsing distance.`);
+                    await _craftCombatUpgrades(agent.bot);
+                    await skills.goToPlayer(agent.bot, targetName, 4);
+                    await skills.attackEntity(agent.bot, targetPlayer, true);
+                } else {
+                    // Elon and default: aggression-first even when disadvantaged.
+                    say(agent, `${targetName} is geared. No problem, forcing the fight.`);
+                    await _craftCombatUpgrades(agent.bot);
+                    await skills.attackEntity(agent.bot, targetPlayer, true);
+                }
+            });
+            this.last_reaction_at = Date.now();
         }
     },
     {
