@@ -34,15 +34,71 @@ async function main() {
     // Continuously stop bots while waiting so they don't waste health/hunger
     console.log('[Orchestrator] Waiting for hunters and a human player to join the game...');
     await waitForAgents(gameState);
-    console.log(`[Orchestrator] All hunters are online and player "${gameState.playerName}" detected. Chase begins in 30 seconds...`);
+    console.log(`[Orchestrator] All hunters are online and player "${gameState.playerName}" detected.`);
 
-    // Keep bots stopped during the 30s grace period
-    // Also heal/feed them so they start the hunt at full stats
-    for (let i = 0; i < 6; i++) {
-        stopAllBots(gameState);
-        await gameState.healAndFeedHunters();
-        await sleep(5000);
+    // === SPAWN RESET: Teleport everyone to world spawn ===
+    console.log('[Orchestrator] Teleporting all players to spawn...');
+    await teleportAllToSpawn(gameState);
+
+    // Freeze hunters in place (blindness + slowness + mining fatigue)
+    console.log('[Orchestrator] Freezing hunters...');
+    await freezeHunters(gameState);
+
+    // Heal/feed hunters while frozen
+    await gameState.healAndFeedHunters();
+
+    // === HEAD START: 10-second countdown with title screens ===
+    console.log('[Orchestrator] Starting 10-second head start for runner...');
+
+    // Show "GET READY" to everyone
+    await gameState.rconBatch([
+        'title @a times 5 30 10',
+        'title @a title {"text":"GET READY","color":"gold","bold":true}',
+        'title @a subtitle {"text":"Hunters vs Runner","color":"yellow"}',
+        'playsound minecraft:block.note_block.pling master @a',
+    ]);
+    await sleep(2000);
+
+    // Tell the runner to RUN
+    await gameState.rconBatch([
+        `title ${gameState.playerName} times 5 30 10`,
+        `title ${gameState.playerName} title {"text":"RUN!","color":"green","bold":true}`,
+        `title ${gameState.playerName} subtitle {"text":"You have 10 seconds head start!","color":"white"}`,
+        `playsound minecraft:entity.player.levelup master ${gameState.playerName}`,
+    ]);
+    // Tell hunters they're frozen
+    for (const name of gameState.getAgentNames()) {
+        await gameState.rconCommand(`title ${name} times 5 30 10`);
+        await gameState.rconCommand(`title ${name} title {"text":"FROZEN","color":"red","bold":true}`);
+        await gameState.rconCommand(`title ${name} subtitle {"text":"Hunters release in 10 seconds...","color":"gray"}`);
     }
+    await sleep(2000);
+
+    // Countdown 8..1 via actionbar
+    for (let i = 8; i >= 1; i--) {
+        const color = i <= 3 ? 'red' : i <= 5 ? 'yellow' : 'green';
+        await gameState.rconBatch([
+            `title @a actionbar {"text":"⏱ ${i} seconds until hunters are released!","color":"${color}","bold":true}`,
+        ]);
+        if (i <= 3) {
+            await gameState.rconCommand(`playsound minecraft:block.note_block.hat master @a`);
+        }
+        // Keep hunters frozen during countdown
+        stopAllBots(gameState);
+        await sleep(1000);
+    }
+
+    // Unfreeze hunters
+    console.log('[Orchestrator] Unfreezing hunters — HUNT BEGINS!');
+    await unfreezeHunters(gameState);
+
+    // Show "HUNT BEGINS!" to everyone
+    await gameState.rconBatch([
+        'title @a times 5 40 10',
+        'title @a title {"text":"HUNT BEGINS!","color":"red","bold":true}',
+        'title @a subtitle {"text":"Hunters have been released!","color":"white"}',
+        'playsound minecraft:entity.ender_dragon.growl master @a',
+    ]);
 
     // Initialize HUD before hunt starts
     await gameState.initHud();
@@ -238,6 +294,51 @@ function stopAllBots(gameState) {
     for (const agentName of gameState.getAgentNames()) {
         gameState.sendDirective(agentName, '!stop');
     }
+}
+
+/**
+ * Teleport all players (bots + human) to world spawn point.
+ * Uses ~ for Y to let the server find safe ground level.
+ */
+async function teleportAllToSpawn(gameState) {
+    const cmds = [];
+    // Teleport human player
+    if (gameState.playerName) {
+        cmds.push(`tp ${gameState.playerName} 0 ~ 0`);
+    }
+    // Teleport all bots
+    for (const name of gameState.getAgentNames()) {
+        cmds.push(`tp ${name} 0 ~ 0`);
+    }
+    await gameState.rconBatch(cmds);
+}
+
+/**
+ * Freeze hunters with effects so they can't move during head start.
+ */
+async function freezeHunters(gameState) {
+    const cmds = [];
+    for (const name of gameState.getAgentNames()) {
+        cmds.push(`effect give ${name} minecraft:slowness 15 255 true`);
+        cmds.push(`effect give ${name} minecraft:blindness 15 0 true`);
+        cmds.push(`effect give ${name} minecraft:mining_fatigue 15 255 true`);
+        cmds.push(`effect give ${name} minecraft:jump_boost 15 250 true`); // level 250 = can't jump
+    }
+    await gameState.rconBatch(cmds);
+}
+
+/**
+ * Remove freeze effects from hunters.
+ */
+async function unfreezeHunters(gameState) {
+    const cmds = [];
+    for (const name of gameState.getAgentNames()) {
+        cmds.push(`effect clear ${name} minecraft:slowness`);
+        cmds.push(`effect clear ${name} minecraft:blindness`);
+        cmds.push(`effect clear ${name} minecraft:mining_fatigue`);
+        cmds.push(`effect clear ${name} minecraft:jump_boost`);
+    }
+    await gameState.rconBatch(cmds);
 }
 
 async function waitForAgents(gameState, timeoutMs = 120000) {
