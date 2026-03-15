@@ -138,12 +138,16 @@ async function main() {
         // Check death FIRST — player dying should always trigger hunters_win
         if (gameState.isPlayerDead()) {
             console.log('[Orchestrator] PLAYER KILLED! The hunters win!');
+            // Wait for player to respawn before showing title screen
+            await sleep(3000);
+            stopAllBots(gameState);
             await gameState.showGameOver('hunters_win');
             break;
         }
 
         if (gameState.isHuntOver()) {
             console.log('[Orchestrator] TIME IS UP! The player survived!');
+            stopAllBots(gameState);
             await gameState.showGameOver('player_wins');
             break;
         }
