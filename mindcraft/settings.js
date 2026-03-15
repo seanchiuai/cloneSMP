@@ -20,7 +20,7 @@ const settings = {
     ],
 
     "load_memory": false, // start fresh each hunter-mode session
-    "init_message": "Hunter mode active. A human Runner is trying to beat Minecraft. Coordinate with the other bots, locate the Runner, and continuously disrupt progression.", // sends to all on spawn
+    "init_message": "You are waiting in the lobby. Stay still and wait for the hunt to begin. Do not move, craft, or chat until you receive orders from the Orchestrator.", // sends to all on spawn
     "only_chat_with": [], // users that the bots listen to and send general messages to. if empty it will chat publicly
 
     "speak": false,

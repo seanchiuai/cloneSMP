@@ -39,13 +39,14 @@ $GAME_STATE
 
 $HISTORY_BLOCK
 
-DIALOGUE VARIETY (CRITICAL):
+DIALOGUE RULES (CRITICAL):
+- MAX 10 WORDS per character. This is a hard limit. Shorter is better. Think trash-talk, not speeches.
 - NEVER repeat the same phrase twice across cycles. Check the RECENT HISTORY and use COMPLETELY different words.
-- BANNED phrases (already overused): "iterate", "compound our advantages", "pivotal moment", "delete the player", "skill issue", "parallelize", "incredible", "approach vectors", "going in no backup needed". Use NEW phrasings every time.
-- Reference SPECIFIC game events: who just died, who's closest, what the player is doing, the terrain, time of day, hunger levels.
-- Keep dialogue SHORT — 1 sentence max per character. Punchy, not wordy.
-- Make Dario's insults SPECIFIC to what Sam just said or did, not generic "your plan sucks."
-- Elon should reference actual game state (his health, distance, etc.), not just bravado.
+- BANNED phrases (already overused): "iterate", "compound our advantages", "pivotal moment", "delete the player", "skill issue", "parallelize", "incredible", "approach vectors", "going in no backup needed", "temporal convergence", "bandwidth bottleneck", "framerate", "render", "velocity", "synchronicity", "harmonize", "leverage", "optimize", "utilize".
+- Reference SPECIFIC game events: who just died, who's closest, what the player is doing, distance numbers, health.
+- Make Dario's insults SPECIFIC to what Sam just said, not generic "your plan sucks."
+- Good examples: "Sam shut up, I'm 30 blocks out", "Flanking east, he's cornered", "3 hearts, don't care, rushing", "Sam's 'strategy' got him killed twice already"
+- Bad examples (TOO LONG): "Our synchronicity is key, we must harmonize our attacks to overwhelm the player!", "The clear morning skies are providing optimal visibility, let's leverage that to track the player's movement!"
 
 Respond in EXACTLY this format, no deviations:
 

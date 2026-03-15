@@ -169,6 +169,17 @@ export class GameStateManager {
     }
 
     /**
+     * Apply speed boost to all hunters during desperation phase.
+     */
+    async applySpeedToHunters() {
+        const cmds = [];
+        for (const agentName of this.getAgentNames()) {
+            cmds.push(`effect give ${agentName} minecraft:speed 10 1 true`);
+        }
+        await this.rconBatch(cmds);
+    }
+
+    /**
      * Make an agent execute a chat command (slash command).
      */
     sendChatCommand(agentName, command) {
@@ -413,6 +424,51 @@ export class GameStateManager {
     }
 
     /**
+     * Check if the human player is dead by reading their Health via RCON.
+     * Returns true if the player's health is 0 or they can't be found (disconnected/dead).
+     */
+    async isPlayerDead() {
+        if (!this.playerName) return false;
+        try {
+            const resp = await this.rconCommand(`data get entity ${this.playerName} Health`);
+            if (!resp) return false;
+            // Format: "Player has the following entity data: 0.0f"
+            const match = resp.match(/([\d.]+)f/);
+            if (match) {
+                return parseFloat(match[1]) <= 0;
+            }
+            // If entity not found, player might be dead or disconnected
+            if (resp.includes('No entity was found')) return true;
+        } catch (err) {
+            // silent
+        }
+        return false;
+    }
+
+    /**
+     * Show a full-screen game over message using title commands.
+     * @param {'hunters_win'|'player_wins'} outcome
+     */
+    async showGameOver(outcome) {
+        const cmds = [];
+        if (outcome === 'hunters_win') {
+            // Show to everyone
+            cmds.push('title @a times 10 100 40');
+            cmds.push('title @a title {"text":"HUNTERS WIN!","color":"red","bold":true}');
+            cmds.push('title @a subtitle {"text":"The player has been eliminated!","color":"gray"}');
+            // Also play a sound
+            cmds.push('playsound minecraft:entity.ender_dragon.growl master @a');
+        } else {
+            // Player survived — show victory
+            cmds.push('title @a times 10 100 40');
+            cmds.push('title @a title {"text":"YOU SURVIVED!","color":"green","bold":true}');
+            cmds.push('title @a subtitle {"text":"The hunters failed to catch you!","color":"gray"}');
+            cmds.push('playsound minecraft:ui.toast.challenge_complete master @a');
+        }
+        await this.rconBatch(cmds);
+    }
+
+    /**
      * Keep hunters fed and healthy via RCON. Apply saturation to any hunter
      * with low hunger, and regeneration to any with low health.
      */
@@ -423,10 +479,13 @@ export class GameStateManager {
             const hunger = state.gameplay.hunger ?? 20;
             const health = state.gameplay.health ?? 20;
             if (hunger < 15) {
-                cmds.push(`effect give ${name} minecraft:saturation 5 1 true`);
+                cmds.push(`effect give ${name} minecraft:saturation 5 2 true`);
             }
-            if (health < 15) {
-                cmds.push(`effect give ${name} minecraft:regeneration 5 1 true`);
+            if (health < 10) {
+                // Critical health: instant heal to prevent dying to mobs
+                cmds.push(`effect give ${name} minecraft:instant_health 1 1 true`);
+            } else if (health < 15) {
+                cmds.push(`effect give ${name} minecraft:regeneration 5 2 true`);
             }
         }
         if (cmds.length > 0) {

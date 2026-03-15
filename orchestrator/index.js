@@ -31,10 +31,18 @@ async function main() {
     }
 
     // Wait for agents AND a human player to come online
+    // Continuously stop bots while waiting so they don't waste health/hunger
     console.log('[Orchestrator] Waiting for hunters and a human player to join the game...');
     await waitForAgents(gameState);
     console.log(`[Orchestrator] All hunters are online and player "${gameState.playerName}" detected. Chase begins in 30 seconds...`);
-    await sleep(30000);
+
+    // Keep bots stopped during the 30s grace period
+    // Also heal/feed them so they start the hunt at full stats
+    for (let i = 0; i < 6; i++) {
+        stopAllBots(gameState);
+        await gameState.healAndFeedHunters();
+        await sleep(5000);
+    }
 
     // Initialize HUD before hunt starts
     await gameState.initHud();
@@ -66,6 +74,14 @@ async function main() {
 
         if (gameState.isHuntOver()) {
             console.log('[Orchestrator] TIME IS UP! The player survived!');
+            await gameState.showGameOver('player_wins');
+            break;
+        }
+
+        // Check if the player has been killed
+        if (await gameState.isPlayerDead()) {
+            console.log('[Orchestrator] PLAYER KILLED! The hunters win!');
+            await gameState.showGameOver('hunters_win');
             break;
         }
 
@@ -105,9 +121,11 @@ async function main() {
 async function runCycle(gameState) {
     const agentNames = gameState.getAgentNames();
 
-    // DESPERATION OVERRIDE: last 30 seconds — skip LLM, hardcode rush
+    // DESPERATION OVERRIDE: last 60 seconds — skip LLM, hardcode rush
     if (gameState.isDesperationPhase()) {
         console.log('[Orchestrator] DESPERATION MODE — All hunters rush!');
+        // Give speed boost so hunters can actually close distance
+        await gameState.applySpeedToHunters();
         const desperationDirs = getDesperationDirectives(agentNames, gameState.playerPosition, gameState.playerName);
         sendDirectives(gameState, desperationDirs);
 
@@ -177,11 +195,9 @@ function sendDirectives(gameState, directives) {
             dist = Math.sqrt((pos.x - pp.x) ** 2 + (pos.z - pp.z) ** 2);
         }
 
-        // Fix #4: If bot is Idle and far from player, force a stop first to unstick
-        const action = state?.action?.current || '';
-        if (action === 'Idle' && dist > 10 && playerName) {
-            gameState.sendDirective(agentName, '!stop');
-        }
+        // Always stop the bot first so it picks up the new command.
+        // Without this, bots stuck in a stale goToPlayer ignore new directives.
+        gameState.sendDirective(agentName, '!stop');
 
         let command;
         if (playerName && dist < 24) {
@@ -215,11 +231,27 @@ async function armHunters(gameState) {
     console.log('[Orchestrator] Armed all hunters with iron sword + shield');
 }
 
+/**
+ * Stop all bots — cancels their current action and self-prompter loop.
+ */
+function stopAllBots(gameState) {
+    for (const agentName of gameState.getAgentNames()) {
+        gameState.sendDirective(agentName, '!stop');
+    }
+}
+
 async function waitForAgents(gameState, timeoutMs = 120000) {
     const start = Date.now();
+    let stopTick = 0;
     while (Date.now() - start < timeoutMs) {
         // Check if bots are connected
         if (gameState.connected && Object.keys(gameState.agentStates).length > 0) {
+            // Stop bots every ~10s so they stay idle while waiting for the human
+            stopTick++;
+            if (stopTick % 5 === 0) {
+                stopAllBots(gameState);
+            }
+
             // Try to detect player via RCON (works regardless of bot proximity)
             if (!gameState.playerName) {
                 const playerName = await gameState.detectPlayerViaRcon();
