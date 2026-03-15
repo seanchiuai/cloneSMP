@@ -30,15 +30,19 @@ async function main() {
         process.exit(1);
     }
 
-    // Wait for agents to come online
-    console.log('[Orchestrator] Waiting for hunters to join the game...');
+    // Wait for agents AND a human player to come online
+    console.log('[Orchestrator] Waiting for hunters and a human player to join the game...');
     await waitForAgents(gameState);
-    console.log('[Orchestrator] All hunters are online. Starting hunt in 5 seconds...');
+    console.log(`[Orchestrator] All hunters are online and player "${gameState.playerName}" detected. Starting hunt in 5 seconds...`);
     await sleep(5000);
 
     // Start the hunt timer
     gameState.startHunt();
     console.log('[Orchestrator] HUNT STARTED! 3 minutes on the clock!');
+
+    // Apply glowing effect so players can always see the AI hunters
+    console.log('[Orchestrator] Applying glow effect to all hunters...');
+    gameState.applyGlowToHunters();
 
     // Main orchestration loop
     let cycleCount = 0;
@@ -52,6 +56,11 @@ async function main() {
         if (gameState.isHuntOver()) {
             console.log('[Orchestrator] TIME IS UP! The player survived!');
             break;
+        }
+
+        // Refresh glow effect every ~60 seconds (every 6th cycle)
+        if (cycleCount % 6 === 0) {
+            gameState.applyGlowToHunters();
         }
 
         try {

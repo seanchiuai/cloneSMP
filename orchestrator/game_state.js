@@ -132,6 +132,30 @@ export class GameStateManager {
     }
 
     /**
+     * Apply glowing effect to all hunters so they're always visible to the player.
+     * Bots must be opped on the server (run `/op BotName` for each bot).
+     */
+    applyGlowToHunters() {
+        for (const agentName of this.getAgentNames()) {
+            this.sendChatCommand(agentName, `/effect give ${agentName} minecraft:glowing infinite 0 true`);
+        }
+    }
+
+    /**
+     * Make an agent execute a chat command (slash command).
+     */
+    sendChatCommand(agentName, command) {
+        if (!this.socket || !this.connected) {
+            console.warn(`[GameState] Not connected, cannot send command to ${agentName}`);
+            return;
+        }
+        this.socket.emit('send-message', agentName, {
+            from: 'Orchestrator',
+            message: `!newAction("Execute this chat command exactly: ${command.replace(/"/g, "'")}")`
+        });
+    }
+
+    /**
      * Send a directive message to a specific agent via MindServer.
      */
     sendDirective(agentName, message) {
@@ -149,7 +173,8 @@ export class GameStateManager {
      * Send a dialogue line to a specific agent to say in in-game chat.
      */
     sendDialogueLine(agentName, line) {
-        this.sendDirective(agentName, `!chat("${line.replace(/"/g, "'")}")`);
+        const safeLine = line.replace(/"/g, "'").replace(/\\/g, '');
+        this.sendDirective(agentName, `!newAction("Say this in chat exactly: ${safeLine}")`);
     }
 
     /**
@@ -221,6 +246,6 @@ export class GameStateManager {
     }
 
     isReady() {
-        return this.connected && Object.keys(this.agentStates).length > 0;
+        return this.connected && Object.keys(this.agentStates).length > 0 && this.playerName !== null;
     }
 }
