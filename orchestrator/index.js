@@ -69,19 +69,7 @@ async function runCycle(gameState) {
     // 3. Parse response
     const parsed = parseOrchestratorResponse(llmResponse);
 
-    // 4. Display dialogue in game chat
-    if (parsed.dialogue.length > 0) {
-        console.log('[Orchestrator] Broadcasting dialogue...');
-        for (const { name, line } of parsed.dialogue) {
-            // Send each dialogue line to the corresponding agent to say in chat
-            gameState.sendDirective(name, `Say this in chat exactly (use !chat): "${line}"`);
-            await sleep(500); // stagger the messages for readability
-        }
-    } else {
-        console.warn('[Orchestrator] No dialogue parsed from LLM response');
-    }
-
-    // 5. Send directives
+    // 4. Send directives FIRST — dialogue must not overwrite the action goal
     const agentNames = gameState.getAgentNames();
     let directives = parsed.directives;
 
@@ -94,12 +82,25 @@ async function runCycle(gameState) {
     }
 
     sendDirectives(gameState, directives);
+
+    // 5. Send dialogue AFTER directives with a delay so bots have started acting
+    await sleep(3000);
+    if (parsed.dialogue.length > 0) {
+        console.log('[Orchestrator] Broadcasting dialogue...');
+        for (const { name, line } of parsed.dialogue) {
+            gameState.sendDialogueLine(name, line);
+            await sleep(500); // stagger messages for readability
+        }
+    } else {
+        console.warn('[Orchestrator] No dialogue parsed from LLM response');
+    }
 }
 
 function sendDirectives(gameState, directives) {
     for (const [agentName, directive] of Object.entries(directives)) {
-        const fullDirective = `[ORCHESTRATOR DIRECTIVE] ${directive}. Execute this now. Use !goal or !newAction to complete the task.`;
-        console.log(`[Orchestrator] -> ${agentName}: ${directive}`);
+        // Prefix with !newAction so Mindcraft executes it as a command, not just text
+        const fullDirective = `!newAction("${directive.replace(/"/g, "'")}")`;
+        console.log(`[Orchestrator] -> ${agentName}: ${fullDirective}`);
         gameState.sendDirective(agentName, fullDirective);
     }
 }

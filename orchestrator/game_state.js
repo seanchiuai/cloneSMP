@@ -59,6 +59,14 @@ export class GameStateManager {
     }
 
     /**
+     * Send a dialogue line to a specific agent to say in in-game chat.
+     * Uses !chat so it appears as a Minecraft chat message, not a directive.
+     */
+    sendDialogueLine(agentName, line) {
+        this.sendDirective(agentName, `!chat("${line.replace(/"/g, "'")}")`);
+    }
+
+    /**
      * Send a chat message to all agents (used for dialogue display).
      */
     broadcastDialogue(dialogue) {
