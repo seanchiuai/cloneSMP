@@ -86,7 +86,7 @@ export class GameStateManager {
     }
 
     isDesperationPhase() {
-        return this.huntStartTime && this.getRemainingSeconds() <= 30;
+        return this.huntStartTime && this.getRemainingSeconds() <= 60;
     }
 
     getTimeInfo() {
@@ -96,12 +96,12 @@ export class GameStateManager {
         const seconds = remaining % 60;
         const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
-        if (remaining <= 30) {
-            return `ELAPSED: ${elapsed}s | REMAINING: ${timeStr} | ⚠️ DESPERATION MODE — LESS THAN 30 SECONDS! ALL HUNTERS MUST SPRINT TO PLAYER AND ATTACK NOW! NO CRAFTING, NO FLANKING, JUST RUSH!`;
-        } else if (remaining <= 60) {
-            return `ELAPSED: ${elapsed}s | REMAINING: ${timeStr} | URGENT — Under 1 minute! Maximum aggression, minimal crafting.`;
+        if (remaining <= 60) {
+            return `ELAPSED: ${elapsed}s | REMAINING: ${timeStr} | ⚠️ DESPERATION MODE — ALL HUNTERS SPRINT TO PLAYER AND ATTACK! NO CRAFTING, NO FLANKING, JUST RUSH!`;
+        } else if (remaining <= 120) {
+            return `ELAPSED: ${elapsed}s | REMAINING: ${timeStr} | AGGRESSIVE — Chase relentlessly. Every hunter must be sprinting toward the player RIGHT NOW.`;
         } else {
-            return `ELAPSED: ${elapsed}s | REMAINING: ${timeStr} | Hunt smart — craft if needed, flank, use terrain.`;
+            return `ELAPSED: ${elapsed}s | REMAINING: ${timeStr} | CHASE MODE — All hunters chase the player. No downtime. Sprint and attack.`;
         }
     }
 
