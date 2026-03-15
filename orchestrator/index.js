@@ -107,6 +107,9 @@ async function main() {
     // Initialize HUD before hunt starts
     await gameState.initHud();
 
+    // Start death watcher BEFORE the hunt so we catch deaths immediately
+    gameState.startDeathWatcher();
+
     // Start the hunt timer
     gameState.startHunt();
     console.log('[Orchestrator] HUNT STARTED! 2 minutes on the clock!');
@@ -132,16 +135,16 @@ async function main() {
         const secs = remaining % 60;
         console.log(`\n[Orchestrator] === Cycle ${cycleCount} | ${mins}:${secs.toString().padStart(2, '0')} remaining ===`);
 
-        if (gameState.isHuntOver()) {
-            console.log('[Orchestrator] TIME IS UP! The player survived!');
-            await gameState.showGameOver('player_wins');
+        // Check death FIRST — player dying should always trigger hunters_win
+        if (gameState.isPlayerDead()) {
+            console.log('[Orchestrator] PLAYER KILLED! The hunters win!');
+            await gameState.showGameOver('hunters_win');
             break;
         }
 
-        // Check if the player has been killed
-        if (await gameState.isPlayerDead()) {
-            console.log('[Orchestrator] PLAYER KILLED! The hunters win!');
-            await gameState.showGameOver('hunters_win');
+        if (gameState.isHuntOver()) {
+            console.log('[Orchestrator] TIME IS UP! The player survived!');
+            await gameState.showGameOver('player_wins');
             break;
         }
 
@@ -171,7 +174,8 @@ async function main() {
         await sleep(ORCHESTRATOR_INTERVAL_MS);
     }
 
-    // Clean up HUD
+    // Clean up
+    gameState.stopDeathWatcher();
     await gameState.cleanupHud();
 
     console.log('[Orchestrator] Hunt complete. Shutting down.');

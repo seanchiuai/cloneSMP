@@ -1,5 +1,7 @@
 import { io } from 'socket.io-client';
 import { Rcon } from 'rcon-client';
+import fs from 'fs';
+import path from 'path';
 
 /**
  * Manages connection to MindServer and maintains live state of all agents.
@@ -17,6 +19,9 @@ export class GameStateManager {
         this.huntDurationMs = 2 * 60 * 1000; // 2 minutes
         this.cycleHistory = []; // last N cycles of {state, directives, timestamp}
         this.maxHistory = 3;
+        this.playerDead = false; // set true instantly by log watcher on death
+        this._logWatcher = null;
+        this._logOffset = 0;
     }
 
     async connect() {
@@ -424,25 +429,82 @@ export class GameStateManager {
     }
 
     /**
-     * Check if the human player is dead by reading their Health via RCON.
-     * Returns true if the player's health is 0 or they can't be found (disconnected/dead).
+     * Check if the human player is dead (set by log watcher).
      */
-    async isPlayerDead() {
-        if (!this.playerName) return false;
+    isPlayerDead() {
+        return this.playerDead;
+    }
+
+    /**
+     * Start watching the Minecraft server log for player death messages.
+     * Death messages in MC always start with the player name (e.g. "Player was slain by ...").
+     * This gives instant detection instead of polling health every cycle.
+     */
+    startDeathWatcher() {
+        const logPath = path.resolve(import.meta.dirname, '..', 'server', 'logs', 'latest.log');
         try {
-            const resp = await this.rconCommand(`data get entity ${this.playerName} Health`);
-            if (!resp) return false;
-            // Format: "Player has the following entity data: 0.0f"
-            const match = resp.match(/([\d.]+)f/);
-            if (match) {
-                return parseFloat(match[1]) <= 0;
-            }
-            // If entity not found, player might be dead or disconnected
-            if (resp.includes('No entity was found')) return true;
-        } catch (err) {
-            // silent
+            const stats = fs.statSync(logPath);
+            this._logOffset = stats.size; // only watch new lines from now
+        } catch {
+            console.warn('[GameState] Could not find server log, death watcher disabled');
+            return;
         }
-        return false;
+
+        // Death message patterns — player name always appears at start of the message
+        const deathVerbs = [
+            'was slain by', 'was shot by', 'was killed by', 'was fireballed by',
+            'was pummeled by', 'was squashed by', 'was impaled by',
+            'fell ', 'drowned', 'burned ', 'went up in flames',
+            'tried to swim in lava', 'suffocated', 'starved',
+            'blew up', 'hit the ground', 'experienced kinetic energy',
+            'didn\'t want to live', 'withered away', 'was pricked',
+            'walked into ', 'was frozen', 'was stung',
+        ];
+
+        const checkNewLines = () => {
+            if (this.playerDead || !this.playerName) return;
+            try {
+                const stats = fs.statSync(logPath);
+                if (stats.size <= this._logOffset) return;
+
+                const buf = Buffer.alloc(stats.size - this._logOffset);
+                const fd = fs.openSync(logPath, 'r');
+                fs.readSync(fd, buf, 0, buf.length, this._logOffset);
+                fs.closeSync(fd);
+                this._logOffset = stats.size;
+
+                const newLines = buf.toString('utf8').split('\n');
+                for (const line of newLines) {
+                    // Server log format: [HH:MM:SS] [Server thread/INFO]: PlayerName death message
+                    const infoMatch = line.match(/\[Server thread\/INFO\]:\s*(.+)/);
+                    if (!infoMatch) continue;
+                    const msg = infoMatch[1];
+                    if (!msg.startsWith(this.playerName)) continue;
+                    const afterName = msg.slice(this.playerName.length + 1); // skip name + space
+                    if (deathVerbs.some(v => afterName.startsWith(v))) {
+                        console.log(`[GameState] DEATH DETECTED: ${msg}`);
+                        this.playerDead = true;
+                        return;
+                    }
+                }
+            } catch {
+                // silent — log file may be rotating
+            }
+        };
+
+        // Poll the log file every 250ms for near-instant detection
+        this._logWatcher = setInterval(checkNewLines, 250);
+        console.log('[GameState] Death watcher started (watching server log)');
+    }
+
+    /**
+     * Stop the death watcher.
+     */
+    stopDeathWatcher() {
+        if (this._logWatcher) {
+            clearInterval(this._logWatcher);
+            this._logWatcher = null;
+        }
     }
 
     /**
