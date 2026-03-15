@@ -142,6 +142,7 @@ async function main() {
             await sleep(3000);
             stopAllBots(gameState);
             await gameState.showGameOver('hunters_win');
+            await sendPostGameReactions(gameState, 'hunters_win');
             break;
         }
 
@@ -149,6 +150,7 @@ async function main() {
             console.log('[Orchestrator] TIME IS UP! The player survived!');
             stopAllBots(gameState);
             await gameState.showGameOver('player_wins');
+            await sendPostGameReactions(gameState, 'player_wins');
             break;
         }
 
@@ -423,6 +425,68 @@ async function waitForAgents(gameState, timeoutMs = 120000) {
         process.stdout.write('.');
     }
     console.warn('\n[Orchestrator] Timeout waiting for agents — proceeding anyway');
+}
+
+/**
+ * Send post-game celebration or rage reactions from each bot in character.
+ */
+async function sendPostGameReactions(gameState, outcome) {
+    const winLines = {
+        SamAltman: [
+            "GG! That's what I call scaling intelligence to its logical conclusion.",
+            "Another successful deployment. The AI safety people were worried for nothing.",
+            "We did it! This is the future I've been fundraising for!",
+        ],
+        ElonMusk: [
+            "GET REKT. That kill was more satisfying than launching a rocket.",
+            "Lmaooo you got absolutely destroyed. Skill issue tbh.",
+            "Too easy. I've seen harder challenges on Mars.",
+        ],
+        DarioAmodei: [
+            "I want it noted that this kill was conducted within ethical guidelines.",
+            "We eliminated the target safely and responsibly. Well done, team.",
+            "The alignment worked. We hunted exactly who we intended to hunt.",
+        ],
+        JensenHuang: [
+            "INCREDIBLE! That kill was powered by pure GPU acceleration!",
+            "The leather jacket stays UNDEFEATED. Jensen Huang does NOT lose!",
+            "That was like CUDA cores processing a tensor — fast and devastating!",
+        ],
+    };
+
+    const loseLines = {
+        SamAltman: [
+            "This is a temporary setback. We'll pivot and iterate.",
+            "We clearly need more funding. The model wasn't scaled enough.",
+            "I'm calling an emergency board meeting about this failure.",
+        ],
+        ElonMusk: [
+            "This is RIGGED. I'm buying Mojang and banning this player.",
+            "Unacceptable. I'm firing the entire hunting team.",
+            "Whatever. I didn't even want to win. I was busy thinking about Mars.",
+        ],
+        DarioAmodei: [
+            "I blame the lack of safety guardrails on this hunting operation.",
+            "Perhaps we should have spent more time on alignment before rushing in.",
+            "This is what happens when you let Elon lead the strategy.",
+        ],
+        JensenHuang: [
+            "NOT incredible. We need more cores. MORE CORES!",
+            "This wouldn't have happened if everyone wore leather jackets like me.",
+            "I refuse to accept this result. The benchmarks clearly show we should have won.",
+        ],
+    };
+
+    const lines = outcome === 'hunters_win' ? winLines : loseLines;
+
+    await sleep(2000);
+    for (const name of gameState.getAgentNames()) {
+        const pool = lines[name];
+        if (!pool) continue;
+        const line = pool[Math.floor(Math.random() * pool.length)];
+        gameState.sendDialogueLine(name, line);
+        await sleep(1500);
+    }
 }
 
 function sleep(ms) {
