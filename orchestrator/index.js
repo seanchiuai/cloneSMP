@@ -36,6 +36,10 @@ async function main() {
     await waitForAgents(gameState);
     console.log(`[Orchestrator] All hunters are online and player "${gameState.playerName}" detected.`);
 
+    // === FULL RESET: Clear inventory, effects, XP, and reset health/hunger ===
+    console.log('[Orchestrator] Resetting all players for new game...');
+    await resetAllPlayers(gameState);
+
     // === SPAWN RESET: Teleport everyone to world spawn ===
     console.log('[Orchestrator] Teleporting all players to spawn...');
     await teleportAllToSpawn(gameState);
@@ -294,6 +298,48 @@ function stopAllBots(gameState) {
     for (const agentName of gameState.getAgentNames()) {
         gameState.sendDirective(agentName, '!stop');
     }
+}
+
+/**
+ * Full reset for all players (bots + human) at the start of each game.
+ * Clears inventory, effects, XP, and restores full health/hunger.
+ * Also kills dropped items and clears old HUD elements.
+ */
+async function resetAllPlayers(gameState) {
+    const cmds = [];
+    const allPlayers = [...gameState.getAgentNames()];
+    if (gameState.playerName) allPlayers.push(gameState.playerName);
+
+    for (const name of allPlayers) {
+        // Clear inventory
+        cmds.push(`clear ${name}`);
+        // Clear all effects (leftover glow, speed, etc.)
+        cmds.push(`effect clear ${name}`);
+        // Set gamemode survival (in case anything changed it)
+        cmds.push(`gamemode survival ${name}`);
+        // Restore full health and hunger
+        cmds.push(`effect give ${name} minecraft:instant_health 1 10 true`);
+        cmds.push(`effect give ${name} minecraft:saturation 1 10 true`);
+        // Reset XP
+        cmds.push(`xp set ${name} 0 levels`);
+        cmds.push(`xp set ${name} 0 points`);
+    }
+
+    // Kill all dropped items on the ground (cleanup from previous game)
+    cmds.push('kill @e[type=item]');
+    // Kill leftover arrows
+    cmds.push('kill @e[type=arrow]');
+    // Remove old HUD elements if they exist (ignore errors)
+    cmds.push('bossbar remove clonessmp:timer');
+    cmds.push('scoreboard objectives remove hunterHUD');
+
+    await gameState.rconBatch(cmds);
+    // Wait a tick for instant_health/saturation to apply, then clear the leftover effects
+    await sleep(500);
+    for (const name of allPlayers) {
+        await gameState.rconCommand(`effect clear ${name}`);
+    }
+    console.log('[Orchestrator] All players reset (inventory, effects, health, hunger, XP)');
 }
 
 /**
