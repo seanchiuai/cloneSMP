@@ -17,7 +17,7 @@ export class VLLM {
         else
             vllm_config.baseURL = 'http://0.0.0.0:8000/v1';
 
-        vllm_config.apiKey = process.env.NEBIUS_API_KEY || ""
+        vllm_config.apiKey = getKey('NEBIUS_API_KEY');
 
         this.vllm = new OpenAIApi(vllm_config);
     }
