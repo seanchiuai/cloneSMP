@@ -354,19 +354,11 @@ async function resetAllPlayers(gameState) {
 
 /**
  * Teleport all players (bots + human) to world spawn point.
- * Uses ~ for Y to let the server find safe ground level.
+ * Uses spreadplayers to place everyone safely on the surface near 0,0.
  */
 async function teleportAllToSpawn(gameState) {
-    const cmds = [];
-    // Teleport human player
-    if (gameState.playerName) {
-        cmds.push(`tp ${gameState.playerName} 0 ~ 0`);
-    }
-    // Teleport all bots
-    for (const name of gameState.getAgentNames()) {
-        cmds.push(`tp ${name} 0 ~ 0`);
-    }
-    await gameState.rconBatch(cmds);
+    // spreadplayers finds a safe surface position — no falling from sky
+    await gameState.rconCommand('spreadplayers 0 0 0 5 false @a');
 }
 
 /**
