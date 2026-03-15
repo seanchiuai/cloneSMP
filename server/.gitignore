@@ -1,0 +1,22 @@
+# Minecraft server runtime files
+world/
+world_nether/
+world_the_end/
+logs/
+cache/
+libraries/
+versions/
+plugins/
+config/
+banned-ips.json
+banned-players.json
+ops.json
+whitelist.json
+usercache.json
+permissions.yml
+bukkit.yml
+spigot.yml
+commands.yml
+help.yml
+version_history.json
+*.jar
