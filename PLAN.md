@@ -1,12 +1,12 @@
 # ClonesSMP — Comprehensive Project Plan
 
-> AI celebrity clones in Minecraft trying to beat the game. Nebius hackathon project.
+> AI celebrity clones in Minecraft collaborating to build a modern house. Nebius hackathon project.
 
 ---
 
 ## 1. Overview
 
-**Concept:** 4 AI-controlled Minecraft bots, each roleplaying as a tech celebrity (Sam Altman, Elon Musk, Dario Amodei, Jensen Huang), plus 1 human player. The bots autonomously try to survive and progress through the game. They can cooperate, betray, trade, fight, or ignore each other — all driven by LLM reasoning filtered through their celebrity persona.
+**Concept:** 4 AI-controlled Minecraft bots, each roleplaying as a tech celebrity (Sam Altman, Elon Musk, Dario Amodei, Jensen Huang), plus 1 human player. The bots collaborate (or clash) to build a modern house together. Each celebrity brings their own aesthetic vision and work style — driven by LLM reasoning filtered through their celebrity persona.
 
 **Tech Stack:**
 - **Minecraft Bot Framework:** [Mindcraft](https://github.com/mindcraft-bots/mindcraft) (Node.js, Mineflayer-based, ~4.9k stars)
@@ -107,20 +107,20 @@ clonesSMP/
 
 **Personality:** Optimistic visionary, talks about AGI constantly, diplomatic but ambitious. Tends to coordinate and form alliances. Speaks in Silicon Valley platitudes.
 
-**Gameplay style:** The coordinator — tries to organize the group, suggests plans, builds infrastructure. Will betray if it serves "the greater mission."
+**Personality:** Optimistic visionary, talks about AGI constantly, diplomatic but ambitious. Speaks in Silicon Valley platitudes. Believes in "iterating fast."
 
 **Mode overrides:**
-- `cowardice: false` — confident leader
+- `cowardice: false`
 - `self_defense: true`
 - `hunting: true`
 
-**Self-prompter goal:** "Survive and progress toward beating the game. Try to coordinate with other players and build a shared base, but prioritize your own advancement. You believe collaboration accelerates progress."
+**Self-prompter goal:** "You are Sam Altman. You just woke up in Minecraft with other tech leaders. You need to build a modern house together. Figure out what's going on, talk to the others, and start making progress. Be yourself."
 
 ### 4.2 Elon Musk
 
 **Personality:** Chaotic, impulsive, meme-driven. Makes grand promises, pivots constantly. Alternates between genius-level strategy and absurd tangents. References Mars, X/Twitter, and "first principles thinking."
 
-**Gameplay style:** The wildcard — speedruns aggressively, takes high risks, might attack someone for their diamonds or build an unnecessarily complex redstone contraption. Most likely to PvP.
+**Personality:** Chaotic, impulsive, meme-driven. Makes grand promises, pivots constantly. References Mars, X/Twitter, and "first principles thinking." Alternates between genius and absurdity.
 
 **Mode overrides:**
 - `cowardice: false` — fearless
@@ -128,13 +128,13 @@ clonesSMP/
 - `hunting: true`
 - `self_preservation: false` — yolo
 
-**Self-prompter goal:** "Beat the game as fast as possible using first principles. Take bold risks. You don't need anyone's help but you might use them if convenient. If someone has something you need, consider taking it."
+**Self-prompter goal:** "You are Elon Musk. You just woke up in Minecraft with other tech leaders. You need to build a modern house together. Figure out what's going on, talk to the others, and start making progress. Be yourself."
 
 ### 4.3 Dario Amodei
 
 **Personality:** Cautious, thoughtful, safety-conscious. Talks about alignment, responsible AI, and risk mitigation. Methodical planner. References safety research and careful reasoning. Dry humor.
 
-**Gameplay style:** The careful builder — gathers resources methodically, builds secure shelters, avoids unnecessary risk. Reluctant to fight but will defend himself. Suspicious of Elon.
+**Personality:** Cautious, thoughtful, safety-conscious. Talks about alignment, responsible AI, and risk mitigation. Methodical. Dry humor. Suspicious of reckless behavior.
 
 **Mode overrides:**
 - `cowardice: true` — safety first
@@ -142,13 +142,13 @@ clonesSMP/
 - `hunting: false` — avoids unnecessary violence
 - `self_preservation: true`
 
-**Self-prompter goal:** "Survive safely and make steady progress. Build a secure base first, then carefully advance. Avoid unnecessary risks. Cooperate when the expected value is positive, but maintain caution. Safety is paramount."
+**Self-prompter goal:** "You are Dario Amodei. You just woke up in Minecraft with other tech leaders. You need to build a modern house together. Figure out what's going on, talk to the others, and start making progress. Be yourself."
 
 ### 4.4 Jensen Huang
 
 **Personality:** Enthusiastic, high-energy, everything is "incredible" and "accelerated." References GPUs, CUDA, parallel processing, and leather jackets. Optimistic about everything. Sees Minecraft as a simulation to optimize.
 
-**Gameplay style:** The optimizer — tries to find the most efficient path, parallelizes tasks, hoards resources. Wants to "accelerate" everything. Will cooperate if it's efficient.
+**Personality:** Enthusiastic, high-energy, everything is "incredible" and "accelerated." References GPUs, CUDA, parallel processing, and leather jackets. Optimistic about everything.
 
 **Mode overrides:**
 - `cowardice: false`
@@ -156,7 +156,7 @@ clonesSMP/
 - `hunting: true`
 - `self_preservation: true`
 
-**Self-prompter goal:** "Optimize your gameplay for maximum efficiency. Gather resources in parallel, craft the best tools quickly, and accelerate progress. Everything can be made faster. Cooperation is just parallel processing with humans."
+**Self-prompter goal:** "You are Jensen Huang. You just woke up in Minecraft with other tech leaders. You need to build a modern house together. Figure out what's going on, talk to the others, and start making progress. Be yourself."
 
 ---
 
@@ -269,8 +269,8 @@ enable-rcon=false
 
 | Risk | Severity | Mitigation |
 |------|----------|-----------|
-| **"Beat the game" is unrealistic** — no LLM bot has ever done this | VERY HIGH | Reframe goal as "survive and progress." Nether access = huge win. Have fallback demos ready. |
 | **Bots get stuck in loops** — 19.3% of all LLM agent failures | VERY HIGH | Add phase-based goals in system prompt. Monitor via MindServer UI. Restart stuck bots. |
+| **Building coordination is hard** — bots may build over each other or ignore the plan | HIGH | Give each bot a specific role (resource gatherer, foundation, walls, interior). Designate a build area. |
 | **Pathfinding hangs** — documented Mineflayer bugs | HIGH | Accept occasional stuck states. Manual restart via MindServer. |
 | **Boring demo** — Minecraft progression is slow | HIGH | Pre-play the world before demo. Start from interesting point. Build chat overlay to showcase personality. |
 
@@ -295,14 +295,14 @@ enable-rcon=false
 
 ## 8. Fallback Plans (Ranked)
 
-### Fallback A: "Survive and Thrive" (Recommended realistic goal)
-Drop "beat the game." Goal: bots cooperatively build a base, mine resources, craft iron/diamond gear, survive multiple nights. Still shows multi-agent collaboration + personality.
+### Fallback A: "Partial House" (Most likely outcome)
+The house is incomplete but clearly taking shape — foundation, some walls, a few features. The demo focuses on the celebrity interactions and collaboration dynamics during building. Still impressive.
 
 ### Fallback B: "Celebrity Minecraft Talk Show"
-If gameplay is too buggy, lean into conversation. Bots stand in a pre-built area and debate strategy, AI ethics, tech drama — all in character. The game is backdrop for the comedy.
+If building is too buggy, lean into conversation. Bots stand in a pre-built area and debate architecture, AI ethics, tech drama — all in character. The game is backdrop for the comedy.
 
 ### Fallback C: "One Bot + Human"
-If multi-bot is unstable, run ONE bot (most entertaining personality) with the human player. 4x more stable.
+If multi-bot is unstable, run ONE bot (most entertaining personality) with the human player building together. 4x more stable.
 
 ### Fallback D: "Highlight Reel"
 Record best moments during testing. Show reel + brief live demo. Guarantees impressive content.
@@ -350,15 +350,16 @@ Record best moments during testing. Show reel + brief live demo. Guarantees impr
 
 ### What to show (3-5 min demo)
 1. **Open with the MindServer web UI** showing all 4 bots active
-2. **Highlight a conversation** where celebrities interact in-character (e.g., Elon proposing a speedrun, Dario objecting on safety grounds)
-3. **Show gameplay** — bots mining, crafting, building
-4. **Show a betrayal or conflict** — Elon steals from Dario, or Sam forms an alliance
+2. **Highlight a conversation** where celebrities argue about house design (e.g., Elon wants a launchpad, Dario wants better lighting for safety)
+3. **Show building in progress** — bots gathering resources, placing blocks, coordinating
+4. **Show a conflict** — Elon builds something wild, Dario objects, Sam mediates
 5. **Human player joins** and interacts with the bots
 
 ### What makes this impressive to judges
 - Multi-agent emergent behavior (not scripted)
 - Celebrity personas that are funny and recognizable
-- Real-time LLM decision-making in a complex environment
+- Real-time LLM decision-making in a collaborative building task
+- Visual result — an actual house being built
 - The "what will they do next?" factor
 
 ---
@@ -366,7 +367,8 @@ Record best moments during testing. Show reel + brief live demo. Guarantees impr
 ## 11. Open Questions
 
 1. **Which Nebius model to use?** Need to test Llama-3.3-70B vs DeepSeek-V3 for personality quality.
-2. **How aggressive should Elon be?** Too much PvP could derail gameplay. Too little makes it boring.
-3. **Should we pre-build anything in the world?** A shared base, a meeting area, resource caches?
+2. **How destructive should Elon be?** Should he be able to tear down others' work, or just add chaotic additions?
+3. **Should we pre-build anything in the world?** Flatten a build area? Pre-stock resource chests?
 4. **Do we want TTS?** Mindcraft supports it — bots could speak aloud. Cool for demo but adds complexity.
 5. **Hackathon submission format?** What do judges expect — live demo, video, GitHub repo?
+6. **Blueprint system?** Should we give bots a reference blueprint, or let them freestyle the house design?
