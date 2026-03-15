@@ -155,11 +155,24 @@ export class GameStateManager {
     }
 
     /**
-     * Apply glowing effect to all hunters so they're always visible to the player.
+     * Apply glowing effect to all hunters via RCON so they're always visible to the player.
      */
-    applyGlowToHunters() {
-        for (const agentName of this.getAgentNames()) {
-            this.sendChatCommand(agentName, `/effect give ${agentName} minecraft:glowing infinite 0 true`);
+    async applyGlowToHunters() {
+        const rconHost = process.env.RCON_HOST || 'localhost';
+        const rconPort = parseInt(process.env.RCON_PORT || '25575');
+        const rconPassword = process.env.RCON_PASSWORD || 'clonessmp';
+
+        let rcon;
+        try {
+            rcon = await Rcon.connect({ host: rconHost, port: rconPort, password: rconPassword });
+            for (const agentName of this.getAgentNames()) {
+                const resp = await rcon.send(`effect give ${agentName} minecraft:glowing infinite 0 true`);
+                console.log(`[GameState] RCON glow ${agentName}: ${resp}`);
+            }
+        } catch (err) {
+            console.error('[GameState] RCON glow failed:', err.message);
+        } finally {
+            if (rcon) await rcon.end().catch(() => {});
         }
     }
 
@@ -195,8 +208,25 @@ export class GameStateManager {
      * Send a dialogue line to a specific agent to say in in-game chat.
      */
     sendDialogueLine(agentName, line) {
-        const safeLine = line.replace(/"/g, "'").replace(/\\/g, '');
-        this.sendDirective(agentName, `!newAction("Say this in chat exactly: ${safeLine}")`);
+        // Use RCON to send dialogue as server-formatted chat, avoiding bot action interruption
+        this.sendDialogueViaRcon(agentName, line);
+    }
+
+    async sendDialogueViaRcon(agentName, line) {
+        const rconHost = process.env.RCON_HOST || 'localhost';
+        const rconPort = parseInt(process.env.RCON_PORT || '25575');
+        const rconPassword = process.env.RCON_PASSWORD || 'clonessmp';
+        const safeLine = line.replace(/"/g, '\\"').replace(/\\/g, '');
+
+        let rcon;
+        try {
+            rcon = await Rcon.connect({ host: rconHost, port: rconPort, password: rconPassword });
+            await rcon.send(`tellraw @a {"text":"<${agentName}> ${safeLine}"}`);
+        } catch (err) {
+            // Silent fallback — dialogue is non-critical
+        } finally {
+            if (rcon) await rcon.end().catch(() => {});
+        }
     }
 
     /**
@@ -269,5 +299,66 @@ export class GameStateManager {
 
     isReady() {
         return this.connected && Object.keys(this.agentStates).length > 0 && this.playerName !== null;
+    }
+
+    /**
+     * Detect human player via RCON 'list' command.
+     * Returns the first non-bot player name, or null.
+     */
+    async detectPlayerViaRcon() {
+        const rconHost = process.env.RCON_HOST || 'localhost';
+        const rconPort = parseInt(process.env.RCON_PORT || '25575');
+        const rconPassword = process.env.RCON_PASSWORD || 'clonessmp';
+        const botNames = new Set(this.getAgentNames());
+
+        let rcon;
+        try {
+            rcon = await Rcon.connect({ host: rconHost, port: rconPort, password: rconPassword });
+            const resp = await rcon.send('list');
+            // Format: "There are X of a max of Y players online: name1, name2, ..."
+            const match = resp.match(/:\s*(.+)/);
+            if (match) {
+                const players = match[1].split(',').map(s => s.trim()).filter(Boolean);
+                for (const name of players) {
+                    if (!botNames.has(name)) {
+                        return name;
+                    }
+                }
+            }
+        } catch (err) {
+            // silent
+        } finally {
+            if (rcon) await rcon.end().catch(() => {});
+        }
+        return null;
+    }
+
+    /**
+     * Get player position via RCON 'data get entity' command.
+     */
+    async getPlayerPositionViaRcon(playerName) {
+        const rconHost = process.env.RCON_HOST || 'localhost';
+        const rconPort = parseInt(process.env.RCON_PORT || '25575');
+        const rconPassword = process.env.RCON_PASSWORD || 'clonessmp';
+
+        let rcon;
+        try {
+            rcon = await Rcon.connect({ host: rconHost, port: rconPort, password: rconPassword });
+            const resp = await rcon.send(`data get entity ${playerName} Pos`);
+            // Format: "Player has the following entity data: [x, y, z]"
+            const match = resp.match(/\[(-?[\d.]+)d,\s*(-?[\d.]+)d,\s*(-?[\d.]+)d\]/);
+            if (match) {
+                return {
+                    x: Math.round(parseFloat(match[1]) * 100) / 100,
+                    y: Math.round(parseFloat(match[2]) * 100) / 100,
+                    z: Math.round(parseFloat(match[3]) * 100) / 100,
+                };
+            }
+        } catch (err) {
+            // silent
+        } finally {
+            if (rcon) await rcon.end().catch(() => {});
+        }
+        return null;
     }
 }

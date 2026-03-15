@@ -143,9 +143,11 @@ export const actionsList = [
         description: 'Find and go to the nearest entity of a given type in a given range.',
         params: {
             'type': { type: 'string', description: 'The type of entity to go to.' },
-            'search_range': { type: 'float', description: 'The range to search for the entity.', domain: [32, 512] }
+            'search_range': { type: 'float', description: 'The range to search for the entity.', domain: [32, 512, '[]'] }
         },
         perform: runAsAction(async (agent, entity_type, range) => {
+            if (range < 32) range = 32;
+            if (range > 512) range = 512;
             await skills.goToNearestEntity(agent.bot, entity_type, 4, range);
         })
     },

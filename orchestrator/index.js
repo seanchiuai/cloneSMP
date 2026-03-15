@@ -5,7 +5,7 @@ import { GameStateManager } from './game_state.js';
 import { callOrchestrator } from './llm.js';
 import { parseOrchestratorResponse, getFallbackDirectives, getDesperationDirectives } from './parser.js';
 
-const ORCHESTRATOR_INTERVAL_MS = parseInt(process.env.ORCHESTRATOR_INTERVAL_MS || '10000');
+const ORCHESTRATOR_INTERVAL_MS = parseInt(process.env.ORCHESTRATOR_INTERVAL_MS || '5000');
 const MINDSERVER_PORT = parseInt(process.env.MINDSERVER_PORT || '8080');
 
 async function main() {
@@ -46,7 +46,7 @@ async function main() {
 
     // Apply glowing effect so players can always see the AI hunters
     console.log('[Orchestrator] Applying glow effect to all hunters...');
-    gameState.applyGlowToHunters();
+    await gameState.applyGlowToHunters();
 
     // Main orchestration loop
     let cycleCount = 0;
@@ -64,7 +64,13 @@ async function main() {
 
         // Refresh glow effect every ~60 seconds (every 6th cycle)
         if (cycleCount % 6 === 0) {
-            gameState.applyGlowToHunters();
+            await gameState.applyGlowToHunters();
+        }
+
+        // Refresh player position via RCON each cycle (reliable, no proximity needed)
+        if (gameState.playerName) {
+            const pos = await gameState.getPlayerPositionViaRcon(gameState.playerName);
+            if (pos) gameState.playerPosition = pos;
         }
 
         try {
@@ -145,17 +151,56 @@ async function runCycle(gameState) {
 }
 
 function sendDirectives(gameState, directives) {
+    const playerName = gameState.playerName;
     for (const [agentName, directive] of Object.entries(directives)) {
-        const fullDirective = `!newAction("${directive.replace(/"/g, "'")}")`;
-        console.log(`[Orchestrator] -> ${agentName}: ${fullDirective}`);
-        gameState.sendDirective(agentName, fullDirective);
+        // Find this hunter's distance to the player
+        const state = gameState.agentStates[agentName];
+        let dist = Infinity;
+        if (state?.gameplay?.position && gameState.playerPosition) {
+            const pos = state.gameplay.position;
+            const pp = gameState.playerPosition;
+            dist = Math.sqrt((pos.x - pp.x) ** 2 + (pos.z - pp.z) ** 2);
+        }
+
+        // Always chase or attack — maximum aggression
+        let command;
+        if (playerName && dist < 16) {
+            // Within striking range — attack relentlessly
+            command = `!attackPlayer("${playerName}")`;
+        } else if (playerName) {
+            // Far away — sprint to the player, get close
+            command = `!goToPlayer("${playerName}", 2)`;
+        } else if (gameState.playerPosition) {
+            // No player name but have coords — rush to last known position
+            const pp = gameState.playerPosition;
+            command = `!goToCoordinates(${pp.x}, ${pp.y}, ${pp.z}, 2)`;
+        } else {
+            // No info — search aggressively
+            command = `!newAction("Sprint in a random direction searching for the player. Look around constantly. Attack any player on sight.")`;
+        }
+
+        console.log(`[Orchestrator] -> ${agentName}: ${command} (dist=${Math.round(dist)})`);
+        gameState.sendDirective(agentName, command);
     }
 }
 
 async function waitForAgents(gameState, timeoutMs = 120000) {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
-        if (gameState.isReady()) return;
+        // Check if bots are connected
+        if (gameState.connected && Object.keys(gameState.agentStates).length > 0) {
+            // Try to detect player via RCON (works regardless of bot proximity)
+            if (!gameState.playerName) {
+                const playerName = await gameState.detectPlayerViaRcon();
+                if (playerName) {
+                    gameState.playerName = playerName;
+                    // Also try to get their position
+                    const pos = await gameState.getPlayerPositionViaRcon(playerName);
+                    if (pos) gameState.playerPosition = pos;
+                }
+            }
+            if (gameState.playerName) return;
+        }
         await sleep(2000);
         process.stdout.write('.');
     }
