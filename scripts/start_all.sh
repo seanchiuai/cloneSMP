@@ -1,13 +1,13 @@
 #!/bin/bash
-# Start everything: Paper server + Mindcraft bots
-# Usage: NEBIUS_API_KEY=your_key ./start_all.sh
+# Start everything: Paper server + Mindcraft bots + auto skin-setting
+# Usage: GROQCLOUD_API_KEY=your_key ./start_all.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
-if [ -z "$NEBIUS_API_KEY" ]; then
-    echo "ERROR: NEBIUS_API_KEY environment variable not set."
-    echo "Usage: NEBIUS_API_KEY=your_key ./start_all.sh"
+if [ -z "$GROQCLOUD_API_KEY" ] && [ -z "$NEBIUS_API_KEY" ]; then
+    echo "ERROR: Set GROQCLOUD_API_KEY or NEBIUS_API_KEY before running."
+    echo "Usage: GROQCLOUD_API_KEY=your_key ./start_all.sh"
     exit 1
 fi
 
@@ -21,4 +21,20 @@ sleep 20
 
 # Start bots
 echo "Starting Mindcraft bots..."
-NEBIUS_API_KEY="$NEBIUS_API_KEY" "$SCRIPT_DIR/start_bots.sh"
+"$SCRIPT_DIR/start_bots.sh" &
+BOTS_PID=$!
+
+# Wait for bots to connect (give them 30s to spawn in)
+echo "Waiting 30 seconds for bots to join..."
+sleep 30
+
+# Apply skins via RCON
+echo "Applying hunter skins..."
+node "$SCRIPT_DIR/set_skins.js" || echo "Skin setup failed — is SkinsRestorer installed? See server/plugins/README.md"
+
+echo ""
+echo "=== ClonesSMP running ==="
+echo "Join Minecraft at: localhost:55916 (version 1.21.1, offline mode)"
+echo ""
+
+wait $BOTS_PID
