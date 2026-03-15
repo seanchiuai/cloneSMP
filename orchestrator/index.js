@@ -12,7 +12,7 @@ async function main() {
     console.log('[Orchestrator] Starting ClonesSMP Orchestrator...');
     console.log(`[Orchestrator] Cycle interval: ${ORCHESTRATOR_INTERVAL_MS}ms`);
     console.log(`[Orchestrator] MindServer port: ${MINDSERVER_PORT}`);
-    console.log(`[Orchestrator] Hunt duration: 3 minutes`);
+    console.log(`[Orchestrator] Hunt duration: 2 minutes (30s grace period before start)`);
 
     if (!process.env.NEBIUS_API_KEY) {
         console.error('[Orchestrator] ERROR: NEBIUS_API_KEY environment variable is not set!');
@@ -33,12 +33,12 @@ async function main() {
     // Wait for agents AND a human player to come online
     console.log('[Orchestrator] Waiting for hunters and a human player to join the game...');
     await waitForAgents(gameState);
-    console.log(`[Orchestrator] All hunters are online and player "${gameState.playerName}" detected. Starting hunt in 5 seconds...`);
-    await sleep(5000);
+    console.log(`[Orchestrator] All hunters are online and player "${gameState.playerName}" detected. Chase begins in 30 seconds...`);
+    await sleep(30000);
 
     // Start the hunt timer
     gameState.startHunt();
-    console.log('[Orchestrator] HUNT STARTED! 3 minutes on the clock!');
+    console.log('[Orchestrator] HUNT STARTED! 2 minutes on the clock!');
 
     // Auto-op hunters via RCON so they can use /effect commands
     console.log('[Orchestrator] Opping hunters via RCON...');

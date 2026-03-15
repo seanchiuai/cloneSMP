@@ -14,7 +14,7 @@ export class GameStateManager {
         this.playerName = null;
         this.connected = false;
         this.huntStartTime = null; // set when hunt begins
-        this.huntDurationMs = 3 * 60 * 1000; // 3 minutes
+        this.huntDurationMs = 2 * 60 * 1000; // 2 minutes
         this.cycleHistory = []; // last N cycles of {state, directives, timestamp}
         this.maxHistory = 3;
     }
@@ -69,7 +69,7 @@ export class GameStateManager {
 
     startHunt() {
         this.huntStartTime = Date.now();
-        console.log('[GameState] Hunt timer started! 3 minutes on the clock.');
+        console.log('[GameState] Hunt timer started! 2 minutes on the clock.');
     }
 
     getElapsedSeconds() {
