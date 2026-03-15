@@ -40,6 +40,10 @@ async function main() {
     gameState.startHunt();
     console.log('[Orchestrator] HUNT STARTED! 3 minutes on the clock!');
 
+    // Auto-op hunters via RCON so they can use /effect commands
+    console.log('[Orchestrator] Opping hunters via RCON...');
+    await gameState.opHunters();
+
     // Apply glowing effect so players can always see the AI hunters
     console.log('[Orchestrator] Applying glow effect to all hunters...');
     gameState.applyGlowToHunters();

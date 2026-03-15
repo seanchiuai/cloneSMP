@@ -1,4 +1,5 @@
 import { io } from 'socket.io-client';
+import { Rcon } from 'rcon-client';
 
 /**
  * Manages connection to MindServer and maintains live state of all agents.
@@ -132,8 +133,29 @@ export class GameStateManager {
     }
 
     /**
+     * Op all hunters via RCON so they can use /effect commands.
+     */
+    async opHunters() {
+        const rconHost = process.env.RCON_HOST || 'localhost';
+        const rconPort = parseInt(process.env.RCON_PORT || '25575');
+        const rconPassword = process.env.RCON_PASSWORD || 'clonessmp';
+
+        let rcon;
+        try {
+            rcon = await Rcon.connect({ host: rconHost, port: rconPort, password: rconPassword });
+            for (const agentName of this.getAgentNames()) {
+                const resp = await rcon.send(`op ${agentName}`);
+                console.log(`[GameState] RCON op ${agentName}: ${resp}`);
+            }
+        } catch (err) {
+            console.error('[GameState] RCON failed — op bots manually:', err.message);
+        } finally {
+            if (rcon) await rcon.end().catch(() => {});
+        }
+    }
+
+    /**
      * Apply glowing effect to all hunters so they're always visible to the player.
-     * Bots must be opped on the server (run `/op BotName` for each bot).
      */
     applyGlowToHunters() {
         for (const agentName of this.getAgentNames()) {
