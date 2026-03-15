@@ -50,19 +50,40 @@ export function parseOrchestratorResponse(text) {
 }
 
 /**
- * Fallback directives when LLM fails or produces bad output.
+ * Role-aware fallback directives when LLM fails.
+ * Uses player position when available for targeted chasing.
  */
-export function getFallbackDirectives(agentNames) {
+export function getFallbackDirectives(agentNames, playerPosition, playerName) {
+    const playerTarget = playerPosition
+        ? `Go to coordinates (${playerPosition.x}, ${playerPosition.y}, ${playerPosition.z}) where ${playerName || 'the player'} was last seen.`
+        : `Use !entities to locate ${playerName || 'the player'}.`;
+
     const fallbacks = {
-        SamAltman: 'Find the player and coordinate with your team to surround them. Use !entities to locate the player.',
-        ElonMusk: 'Rush toward the player immediately. Use !entities to find them and attack on sight.',
-        DarioAmodei: 'Carefully scout the area for the player. Use !entities to check surroundings before engaging.',
-        JensenHuang: 'Flank around to cut off the player\'s escape. Use !entities to locate them and move to intercept.',
+        SamAltman: `${playerTarget} Coordinate with nearby hunters — call out the player's position if you see them. Attack on sight.`,
+        ElonMusk: `${playerTarget} Sprint directly at the player and attack immediately. Don't wait for anyone.`,
+        DarioAmodei: `Check if you have a weapon. If not, quickly craft a wooden sword (collect 2 planks + 1 stick). Then ${playerTarget.toLowerCase()} Approach from a different angle than the others.`,
+        JensenHuang: `${playerTarget} Move to cut off escape routes. If the player is heading toward a cave or water, get there first. Build a dirt bridge if needed to close distance.`,
     };
 
     const result = {};
     for (const name of agentNames) {
-        result[name] = fallbacks[name] || 'Hunt the player. Use !entities to find them and attack.';
+        result[name] = fallbacks[name] || `${playerTarget} Hunt and attack the player.`;
+    }
+    return result;
+}
+
+/**
+ * Desperation directives for the final 30 seconds.
+ * Bypasses LLM entirely — pure rush.
+ */
+export function getDesperationDirectives(agentNames, playerPosition, playerName) {
+    const target = playerPosition
+        ? `Sprint to (${playerPosition.x}, ${playerPosition.y}, ${playerPosition.z}) and attack ${playerName || 'the player'} immediately!`
+        : `Use !entities to find ${playerName || 'the player'} and sprint attack them NOW!`;
+
+    const result = {};
+    for (const name of agentNames) {
+        result[name] = `FINAL SECONDS! ${target} Do not stop for anything. Attack attack attack!`;
     }
     return result;
 }

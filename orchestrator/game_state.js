@@ -2,16 +2,20 @@ import { io } from 'socket.io-client';
 
 /**
  * Manages connection to MindServer and maintains live state of all agents.
- * Also runs a spectator-style Mineflayer bot to track the human player position.
+ * Tracks player position, elapsed time, and rolling history.
  */
 export class GameStateManager {
     constructor(mindserverPort = 8080) {
         this.mindserverPort = mindserverPort;
         this.socket = null;
         this.agentStates = {}; // latest state keyed by agent name
-        this.playerPosition = null; // last known player position
+        this.playerPosition = null; // last known player position {x, y, z}
         this.playerName = null;
         this.connected = false;
+        this.huntStartTime = null; // set when hunt begins
+        this.huntDurationMs = 3 * 60 * 1000; // 3 minutes
+        this.cycleHistory = []; // last N cycles of {state, directives, timestamp}
+        this.maxHistory = 3;
     }
 
     async connect() {
@@ -34,6 +38,24 @@ export class GameStateManager {
             for (const [agentName, state] of Object.entries(states)) {
                 if (state?.nearby?.humanPlayers?.length > 0) {
                     this.playerName = state.nearby.humanPlayers[0];
+                    // Try to extract player coordinates from nearby entities
+                    if (state?.nearby?.entities) {
+                        for (const entity of state.nearby.entities) {
+                            if (entity.name === this.playerName || entity.type === 'player') {
+                                this.playerPosition = {
+                                    x: Math.round(entity.position?.x ?? entity.x ?? 0),
+                                    y: Math.round(entity.position?.y ?? entity.y ?? 0),
+                                    z: Math.round(entity.position?.z ?? entity.z ?? 0),
+                                };
+                                break;
+                            }
+                        }
+                    }
+                    // Fallback: estimate player position as near the hunter that sees them
+                    if (!this.playerPosition && state?.gameplay?.position) {
+                        const hp = state.gameplay.position;
+                        this.playerPosition = { x: hp.x, y: hp.y, z: hp.z };
+                    }
                 }
             }
         });
@@ -42,6 +64,71 @@ export class GameStateManager {
             console.warn('[GameState] Disconnected from MindServer');
             this.connected = false;
         });
+    }
+
+    startHunt() {
+        this.huntStartTime = Date.now();
+        console.log('[GameState] Hunt timer started! 3 minutes on the clock.');
+    }
+
+    getElapsedSeconds() {
+        if (!this.huntStartTime) return 0;
+        return Math.floor((Date.now() - this.huntStartTime) / 1000);
+    }
+
+    getRemainingSeconds() {
+        return Math.max(0, Math.floor(this.huntDurationMs / 1000) - this.getElapsedSeconds());
+    }
+
+    isHuntOver() {
+        return this.huntStartTime && this.getRemainingSeconds() <= 0;
+    }
+
+    isDesperationPhase() {
+        return this.huntStartTime && this.getRemainingSeconds() <= 30;
+    }
+
+    getTimeInfo() {
+        const elapsed = this.getElapsedSeconds();
+        const remaining = this.getRemainingSeconds();
+        const minutes = Math.floor(remaining / 60);
+        const seconds = remaining % 60;
+        const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+        if (remaining <= 30) {
+            return `ELAPSED: ${elapsed}s | REMAINING: ${timeStr} | ⚠️ DESPERATION MODE — LESS THAN 30 SECONDS! ALL HUNTERS MUST SPRINT TO PLAYER AND ATTACK NOW! NO CRAFTING, NO FLANKING, JUST RUSH!`;
+        } else if (remaining <= 60) {
+            return `ELAPSED: ${elapsed}s | REMAINING: ${timeStr} | URGENT — Under 1 minute! Maximum aggression, minimal crafting.`;
+        } else {
+            return `ELAPSED: ${elapsed}s | REMAINING: ${timeStr} | Hunt smart — craft if needed, flank, use terrain.`;
+        }
+    }
+
+    /**
+     * Save a cycle's state and directives to rolling history.
+     */
+    addToHistory(stateString, directives) {
+        this.cycleHistory.push({
+            timestamp: this.getElapsedSeconds(),
+            state: stateString,
+            directives,
+        });
+        if (this.cycleHistory.length > this.maxHistory) {
+            this.cycleHistory.shift();
+        }
+    }
+
+    getHistoryBlock() {
+        if (this.cycleHistory.length === 0) return '';
+        let block = 'RECENT HISTORY (last cycles — use this to avoid repeating failed strategies):\n';
+        for (const entry of this.cycleHistory) {
+            block += `\n--- ${entry.timestamp}s into hunt ---\n`;
+            block += `Directives given:\n`;
+            for (const [name, dir] of Object.entries(entry.directives)) {
+                block += `  ${name}: ${dir}\n`;
+            }
+        }
+        return block;
     }
 
     /**
@@ -60,22 +147,9 @@ export class GameStateManager {
 
     /**
      * Send a dialogue line to a specific agent to say in in-game chat.
-     * Uses !chat so it appears as a Minecraft chat message, not a directive.
      */
     sendDialogueLine(agentName, line) {
         this.sendDirective(agentName, `!chat("${line.replace(/"/g, "'")}")`);
-    }
-
-    /**
-     * Send a chat message to all agents (used for dialogue display).
-     */
-    broadcastDialogue(dialogue) {
-        for (const agentName of Object.keys(this.agentStates)) {
-            this.socket.emit('send-message', agentName, {
-                from: 'Orchestrator',
-                message: `[BROADCAST] ${dialogue}`
-            });
-        }
     }
 
     /**
@@ -84,9 +158,11 @@ export class GameStateManager {
     buildGameStateString() {
         const lines = [];
 
-        // Player info
-        if (this.playerName) {
-            lines.push(`PLAYER: ${this.playerName} - last seen near one of the hunters`);
+        // Player info with coordinates
+        if (this.playerName && this.playerPosition) {
+            lines.push(`PLAYER: ${this.playerName} — last known position: (${this.playerPosition.x}, ${this.playerPosition.y}, ${this.playerPosition.z})`);
+        } else if (this.playerName) {
+            lines.push(`PLAYER: ${this.playerName} — position unknown, last seen near a hunter`);
         } else {
             lines.push(`PLAYER: position unknown — no hunter has visual contact`);
         }
@@ -111,7 +187,7 @@ export class GameStateManager {
             const inv = state.inventory?.counts || {};
             const topItems = Object.entries(inv)
                 .sort((a, b) => b[1] - a[1])
-                .slice(0, 6)
+                .slice(0, 8)
                 .map(([item, count]) => `${count}x${item}`)
                 .join(', ');
             const action = state.action?.current || 'Unknown';
@@ -121,26 +197,21 @@ export class GameStateManager {
 
             const canSeePlayer = state.nearby?.humanPlayers?.length > 0;
 
-            lines.push(`- ${name}: pos=(${pos.x}, ${pos.y}, ${pos.z}), health=${g.health}/20, hunger=${g.hunger}/20, biome=${g.biome}`);
+            // Calculate distance to player if possible
+            let distToPlayer = '';
+            if (this.playerPosition && pos) {
+                const dx = pos.x - this.playerPosition.x;
+                const dz = pos.z - this.playerPosition.z;
+                const dist = Math.round(Math.sqrt(dx * dx + dz * dz));
+                distToPlayer = `, dist_to_player=${dist} blocks`;
+            }
+
+            lines.push(`- ${name}: pos=(${pos.x}, ${pos.y}, ${pos.z}), health=${g.health}/20, hunger=${g.hunger}/20${distToPlayer}`);
             lines.push(`  gear: ${gear}`);
             lines.push(`  inventory: ${topItems || 'empty'}`);
             lines.push(`  action: ${action}`);
             lines.push(`  can_see_player: ${canSeePlayer}`);
         }
-
-        // Determine hunt phase
-        const allInventories = Object.values(this.agentStates).map(s => s?.inventory?.counts || {});
-        const hasIronGear = allInventories.some(inv => (inv['iron_sword'] || 0) > 0 || (inv['iron_pickaxe'] || 0) > 0);
-        const hasBlaze = allInventories.some(inv => (inv['blaze_rod'] || 0) > 0 || (inv['blaze_powder'] || 0) > 0);
-        const anyCanSeePlayer = Object.values(this.agentStates).some(s => s?.nearby?.humanPlayers?.length > 0);
-
-        let phase = 'early_game';
-        if (hasBlaze) phase = 'end_rush';
-        else if (hasIronGear) phase = 'active_hunt';
-        else if (anyCanSeePlayer) phase = 'combat';
-
-        lines.push('');
-        lines.push(`HUNT PHASE: ${phase}`);
 
         return lines.join('\n');
     }
