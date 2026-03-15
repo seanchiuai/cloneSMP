@@ -33,7 +33,7 @@ export class VLLM {
         const pack = {
             model: model,
             messages,
-            stop: stop_seq,
+            stop: stop_seq ? [stop_seq] : undefined,
         };
 
         let res = null;

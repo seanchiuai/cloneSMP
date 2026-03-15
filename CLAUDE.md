@@ -34,10 +34,12 @@ clonesSMP/
 │   ├── game_state.js            # Polls bot/player state from MindServer
 │   ├── llm.js                   # Calls Nebius API
 │   ├── parser.js                # Parses LLM output → dialogue + directives
-│   └── prompt.txt               # Orchestrator system prompt
+│   ├── prompt.txt               # Orchestrator system prompt
+│   ├── package.json             # Node deps (openai, dotenv, socket.io-client)
+│   └── .env                     # API keys — NEBIUS_API_KEY (gitignored)
 ├── mindcraft/                   # Cloned Mindcraft repo
 │   ├── settings.js              # Modified for our setup
-│   ├── keys.json                # API keys (gitignored)
+│   ├── keys.json                # API keys (gitignored, not needed — use NEBIUS_API_KEY env var)
 │   ├── profiles/
 │   │   ├── sam_altman.json
 │   │   ├── elon_musk.json
@@ -67,7 +69,7 @@ clonesSMP/
 ### Nebius Integration
 - Orchestrator uses `NEBIUS_API_KEY` env var with Nebius Token Factory's OpenAI-compatible API
 - Each bot profile sets `"api": "vllm"` with `"url": "https://api.tokenfactory.nebius.com/v1/"` and model `meta-llama/Llama-3.3-70B-Instruct-fast`
-- API key passed via env var, NOT in keys.json, to avoid conflicts
+- Orchestrator loads key from `orchestrator/.env` via dotenv; mindcraft bots read it from shell env
 
 ### Mindcraft Profile System
 - Base profile: `survival` (from `profiles/defaults/survival.json`)
@@ -102,7 +104,7 @@ cd mindcraft && NEBIUS_API_KEY=your_key node main.js
 
 ### Start orchestrator
 ```bash
-cd orchestrator && NEBIUS_API_KEY=your_key node index.js
+cd orchestrator && npm start   # loads NEBIUS_API_KEY from .env automatically
 ```
 
 ### Connect as player
