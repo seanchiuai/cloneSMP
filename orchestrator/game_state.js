@@ -158,22 +158,14 @@ export class GameStateManager {
      * Apply glowing effect to all hunters via RCON so they're always visible to the player.
      */
     async applyGlowToHunters() {
-        const rconHost = process.env.RCON_HOST || 'localhost';
-        const rconPort = parseInt(process.env.RCON_PORT || '25575');
-        const rconPassword = process.env.RCON_PASSWORD || 'clonessmp';
-
-        let rcon;
-        try {
-            rcon = await Rcon.connect({ host: rconHost, port: rconPort, password: rconPassword });
-            for (const agentName of this.getAgentNames()) {
-                const resp = await rcon.send(`effect give ${agentName} minecraft:glowing infinite 0 true`);
-                console.log(`[GameState] RCON glow ${agentName}: ${resp}`);
-            }
-        } catch (err) {
-            console.error('[GameState] RCON glow failed:', err.message);
-        } finally {
-            if (rcon) await rcon.end().catch(() => {});
+        const cmds = [];
+        for (const agentName of this.getAgentNames()) {
+            // Clear existing glowing first to avoid "immune/stronger" conflict
+            cmds.push(`effect clear ${agentName} minecraft:glowing`);
+            cmds.push(`effect give ${agentName} minecraft:glowing infinite 0 true`);
         }
+        await this.rconBatch(cmds);
+        console.log('[GameState] Glow applied to all hunters');
     }
 
     /**
@@ -291,6 +283,133 @@ export class GameStateManager {
         }
 
         return lines.join('\n');
+    }
+
+    /**
+     * Send a single RCON command using a shared connection, or create one.
+     */
+    async rconCommand(cmd) {
+        const rconHost = process.env.RCON_HOST || 'localhost';
+        const rconPort = parseInt(process.env.RCON_PORT || '25575');
+        const rconPassword = process.env.RCON_PASSWORD || 'clonessmp';
+
+        let rcon;
+        try {
+            rcon = await Rcon.connect({ host: rconHost, port: rconPort, password: rconPassword });
+            const resp = await rcon.send(cmd);
+            return resp;
+        } catch (err) {
+            // silent
+            return null;
+        } finally {
+            if (rcon) await rcon.end().catch(() => {});
+        }
+    }
+
+    /**
+     * Send multiple RCON commands in one connection.
+     */
+    async rconBatch(cmds) {
+        const rconHost = process.env.RCON_HOST || 'localhost';
+        const rconPort = parseInt(process.env.RCON_PORT || '25575');
+        const rconPassword = process.env.RCON_PASSWORD || 'clonessmp';
+
+        let rcon;
+        try {
+            rcon = await Rcon.connect({ host: rconHost, port: rconPort, password: rconPassword });
+            for (const cmd of cmds) {
+                await rcon.send(cmd);
+            }
+        } catch (err) {
+            console.error('[GameState] RCON batch failed:', err.message);
+        } finally {
+            if (rcon) await rcon.end().catch(() => {});
+        }
+    }
+
+    /**
+     * Initialize the HUD: bossbar for timer, scoreboard sidebar for bot status.
+     */
+    async initHud() {
+        const cmds = [
+            // Create bossbar for hunt timer
+            'bossbar add clonessmp:timer {"text":"Hunt Timer","color":"red"}',
+            'bossbar set clonessmp:timer players @a',
+            'bossbar set clonessmp:timer color red',
+            'bossbar set clonessmp:timer style progress',
+            'bossbar set clonessmp:timer max 120',
+            'bossbar set clonessmp:timer value 120',
+            'bossbar set clonessmp:timer visible true',
+            'bossbar set clonessmp:timer name {"text":"⏱ 2:00 — HUNT BEGINS!","color":"red","bold":true}',
+
+            // Create scoreboard for hunter status
+            'scoreboard objectives add hunterHUD dummy {"text":"🎯 Hunter Status"}',
+            'scoreboard objectives setdisplay sidebar hunterHUD',
+        ];
+        await this.rconBatch(cmds);
+        console.log('[GameState] HUD initialized (bossbar + scoreboard)');
+    }
+
+    /**
+     * Update the HUD with current timer and bot distances/health.
+     */
+    async updateHud() {
+        const remaining = this.getRemainingSeconds();
+        const mins = Math.floor(remaining / 60);
+        const secs = remaining % 60;
+        const timeStr = `${mins}:${secs.toString().padStart(2, '0')}`;
+
+        // Bossbar color based on time remaining
+        let color = 'green';
+        let label = `⏱ ${timeStr} remaining`;
+        if (remaining <= 30) {
+            color = 'red';
+            label = `⚠ ${timeStr} — DESPERATION MODE!`;
+        } else if (remaining <= 60) {
+            color = 'yellow';
+            label = `⏱ ${timeStr} — AGGRESSIVE PHASE`;
+        }
+
+        const cmds = [
+            `bossbar set clonessmp:timer value ${remaining}`,
+            `bossbar set clonessmp:timer color ${color}`,
+            `bossbar set clonessmp:timer name {"text":"${label}","bold":true}`,
+        ];
+
+        // Update scoreboard with hunter info
+        // First reset all scores
+        cmds.push('scoreboard players reset * hunterHUD');
+
+        for (const [name, state] of Object.entries(this.agentStates)) {
+            if (!state?.gameplay) continue;
+
+            const health = Math.round(state.gameplay.health || 0);
+            let dist = '?';
+            if (state.gameplay.position && this.playerPosition) {
+                const pos = state.gameplay.position;
+                const pp = this.playerPosition;
+                dist = Math.round(Math.sqrt((pos.x - pp.x) ** 2 + (pos.z - pp.z) ** 2));
+            }
+
+            // Scoreboard value = distance (most useful info). Name shows who.
+            // Use short display names for readability
+            const shortName = name.replace('Altman', '').replace('Musk', '').replace('Amodei', '').replace('Huang', '');
+            const displayKey = `${shortName} ❤${health} dist`;
+            const distNum = dist === '?' ? 999 : dist;
+            cmds.push(`scoreboard players set "${displayKey}" hunterHUD ${distNum}`);
+        }
+
+        await this.rconBatch(cmds);
+    }
+
+    /**
+     * Clean up HUD elements.
+     */
+    async cleanupHud() {
+        await this.rconBatch([
+            'bossbar remove clonessmp:timer',
+            'scoreboard objectives remove hunterHUD',
+        ]);
     }
 
     getAgentNames() {

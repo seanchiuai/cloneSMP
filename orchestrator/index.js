@@ -36,6 +36,9 @@ async function main() {
     console.log(`[Orchestrator] All hunters are online and player "${gameState.playerName}" detected. Chase begins in 30 seconds...`);
     await sleep(30000);
 
+    // Initialize HUD before hunt starts
+    await gameState.initHud();
+
     // Start the hunt timer
     gameState.startHunt();
     console.log('[Orchestrator] HUNT STARTED! 2 minutes on the clock!');
@@ -73,6 +76,9 @@ async function main() {
             if (pos) gameState.playerPosition = pos;
         }
 
+        // Update in-game HUD (bossbar timer + scoreboard)
+        await gameState.updateHud();
+
         try {
             await runCycle(gameState);
         } catch (err) {
@@ -81,6 +87,9 @@ async function main() {
 
         await sleep(ORCHESTRATOR_INTERVAL_MS);
     }
+
+    // Clean up HUD
+    await gameState.cleanupHud();
 
     console.log('[Orchestrator] Hunt complete. Shutting down.');
     process.exit(0);
