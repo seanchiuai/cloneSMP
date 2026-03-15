@@ -182,8 +182,12 @@ export class Agent {
         this.bot.on('whisper', respondFunc);
         
         this.bot.on('chat', (username, message) => {
-            if (serverProxy.getNumOtherAgents() > 0) return;
-            // only respond to open chat messages when there are no other agents
+            // Allow messages from human players even when other bots are present
+            if (serverProxy.getNumOtherAgents() > 0) {
+                // Ignore messages from other bots, only process human player messages
+                const botNames = serverProxy.getAgents().map(a => a.name);
+                if (botNames.includes(username)) return;
+            }
             respondFunc(username, message);
         });
 
