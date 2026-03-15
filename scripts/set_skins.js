@@ -67,6 +67,15 @@ function rconExec(command) {
     });
 }
 
+function isCommandError(output = '') {
+    const text = output.toLowerCase();
+    return text.includes('unknown or incomplete command')
+        || text.includes('unknown command')
+        || text.includes('usage:')
+        || text.includes('not permitted')
+        || text.includes('no permission');
+}
+
 async function main() {
     console.log('[Skins] Connecting to RCON...');
     // Test connection first
@@ -82,6 +91,9 @@ async function main() {
     for (const { bot, url } of SKINS) {
         try {
             const res = await rconExec(`sr url ${bot} ${url}`);
+            if (isCommandError(res)) {
+                throw new Error(`Skin command rejected by server: ${res}`);
+            }
             console.log(`[Skins] ${bot}: ${res || 'ok'}`);
         } catch (err) {
             console.error(`[Skins] ${bot} failed:`, err.message);
