@@ -509,25 +509,36 @@ export class GameStateManager {
 
     /**
      * Show a full-screen game over message using title commands.
+     * For hunters_win, waits for the player to respawn first so the title is visible.
      * @param {'hunters_win'|'player_wins'} outcome
      */
     async showGameOver(outcome) {
+        if (outcome === 'hunters_win' && this.playerName) {
+            // Wait for player to respawn (health > 0) before showing title
+            for (let i = 0; i < 20; i++) { // up to 10s
+                const resp = await this.rconCommand(`data get entity ${this.playerName} Health`);
+                if (resp) {
+                    const match = resp.match(/([\d.]+)f/);
+                    if (match && parseFloat(match[1]) > 0) break;
+                }
+                await new Promise(r => setTimeout(r, 500));
+            }
+        }
+
         const cmds = [];
         if (outcome === 'hunters_win') {
-            // Show to everyone
             cmds.push('title @a times 10 100 40');
             cmds.push('title @a title {"text":"HUNTERS WIN!","color":"red","bold":true}');
             cmds.push('title @a subtitle {"text":"The player has been eliminated!","color":"gray"}');
-            // Also play a sound
             cmds.push('playsound minecraft:entity.ender_dragon.growl master @a');
         } else {
-            // Player survived — show victory
             cmds.push('title @a times 10 100 40');
             cmds.push('title @a title {"text":"YOU SURVIVED!","color":"green","bold":true}');
             cmds.push('title @a subtitle {"text":"The hunters failed to catch you!","color":"gray"}');
             cmds.push('playsound minecraft:ui.toast.challenge_complete master @a');
         }
-        await this.rconBatch(cmds);
+        const resp = await this.rconBatch(cmds);
+        console.log(`[GameState] Game over screen sent: ${outcome}`);
     }
 
     /**
