@@ -1,4 +1,6 @@
-import 'dotenv/config';
+import { dirname } from 'path';
+import { fileURLToPath } from 'url';
+const __dirname = dirname(fileURLToPath(import.meta.url));
 import { GameStateManager } from './game_state.js';
 import { callOrchestrator } from './llm.js';
 import { parseOrchestratorResponse, getFallbackDirectives } from './parser.js';
